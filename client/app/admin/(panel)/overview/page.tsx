@@ -13,11 +13,14 @@ import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
 
 const OverviewPage = () => {
   const { profile } = useProfile();
-  const { events, loading, error } = useEvents();
-  const { activities } = useActivity();
+  const { liveEvents, loading, error } = useEvents();
+  const {
+    recentActivities,
+    loading: activityLoading,
+    error: activityError,
+  } = useActivity();
 
   const firstName = profile ? profile.name.split(' ')[0] : '';
-  const liveEvents = events.filter((event) => event.status === 'live');
 
   return (
     <>
@@ -55,7 +58,12 @@ const OverviewPage = () => {
       ))}
 
       <h2 className="section-title">Recent Activity</h2>
-      <ActivityList activities={activities.slice(0, 3)} />
+      {activityLoading && <EmptyState title="Loading activity..." />}
+      {activityError && <EmptyState title="Something went wrong" subtitle={activityError} />}
+      {!activityLoading && !activityError && recentActivities.length === 0 && (
+        <EmptyState title="No activity yet" />
+      )}
+      {recentActivities.length > 0 && <ActivityList activities={recentActivities} />}
 
       <CreateEventButton />
     </>

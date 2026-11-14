@@ -18,11 +18,11 @@ Both apps talk to the same Express API (`/api/*`). Supabase is used **through th
 | Products (tickets) | `GET /api/products`, `GET /api/products/:id` | `server/src/features/products/data.mock.ts` |
 | Clients (users) | `GET /api/clients`, `GET /api/clients/:id` (password stripped in service) | `server/src/features/clients/data.mock.ts` |
 | Payments | `GET /api/payments`, `GET /api/payments/:id` | `server/src/features/payments/data.mock.ts` |
-| Events | **client-only** catalog | `client/lib/events.ts` (`eventsCatalog`) |
+| Events | Supabase tables `events` + `event_activity`, read-only API `GET /api/events*` (user app still reads the legacy client catalog) | `server/src/features/events/`, `client/lib/events.ts` (`eventsCatalog`) |
 | Saved events | localStorage per user | `client/lib/storage.ts` |
 | User login | fake: fetches all clients and compares against `DEMO_PASSWORDS` in `AuthProvider` | `client/contexts/AuthProvider.tsx` |
-| Admin login/register | no auth at all, just `router.push` | `client/app/admin/login/page.tsx` |
-| Admin events / activity / profile | derived from `eventsCatalog` / hard-coded | `client/contexts/admin/*Provider.tsx` |
+| Admin login/register | Supabase Auth via `/api/auth/admin/*`, session + refresh in `lib/admin/axios.ts` | `client/contexts/admin/AdminAuthProvider.tsx` |
+| Admin events / activity / profile | from `/api/events`, `/api/events/stats`, `/api/events/activity`, `/api/auth/me` | `client/contexts/admin/*Provider.tsx` |
 | Create event | form does nothing | `client/app/admin/events/new/page.tsx` |
 
 ## Target database (Supabase Postgres)
@@ -160,7 +160,7 @@ Notes:
 
 Admin-side gaps (this developer):
 
-- [ ] `contexts/admin/EventsProvider`, `ActivityProvider`, `ProfileProvider` read `lib/events.ts` / hard-coded data → load from `/api/events`, `/api/events/stats`, `/api/events/:id/activity`, `/api/auth/me`.
+- [x] `contexts/admin/EventsProvider`, `ActivityProvider`, `ProfileProvider` read `lib/events.ts` / hard-coded data → `EventsProvider` loads `/api/events`, `/api/events/stats`, `/api/events/:id`; `ActivityProvider` loads `/api/events/activity`, `/api/events/:id/activity` (both through `adminApi`, admin-only, mapped in `lib/admin/mappers.ts`); `ProfileProvider` derives from the `/api/auth/me` user. No admin file imports `@/lib/events` or `@/types/models`.
 - [x] Admin login/register do nothing (`router.push`) and inputs are uncontrolled (`AuthForm`, `AuthInput`) → `AdminAuthProvider` + controlled inputs + validation + loading.
 - [x] Admin routes are not protected → `components/admin/PrivateRoute` with `role="admin"` in `app/admin/(panel)/layout.tsx` and the other admin pages.
 - [x] Admin logout is a `<Link href="/login">` → `logout()` that clears the session.
@@ -168,11 +168,13 @@ Admin-side gaps (this developer):
 - [x] No toasts in admin → `contexts/admin/ToastProvider.tsx`.
 - [ ] `/admin/events/new` form does nothing → `createEvent` with validation, `creating` flag, image upload.
 - [ ] Live control has no occupancy actions and no realtime → `PATCH /api/events/:id/occupancy` + Broadcast `event-updated` / `activity-created` handled in admin providers.
-- [ ] Admin stats computed on the client → `GET /api/events/stats` (CTE).
+- [x] Admin stats computed on the client → `GET /api/events/stats` (CTE, `getEventStatsRepository`, Bogota day), called by the admin `EventsProvider` (`stats`, shown by `StatsGrid`).
 
 All gaps (server ones are this developer's too):
 
-- [ ] Server: `data.mock.ts` in every feature → Supabase tables + async repositories (`pg` pool).
+- [x] Server: events → tables `events` + `event_activity` in `initDb` (seeded from the old client catalog in `src/db/seed.ts`), async `features/events/event.repository.ts`, read routes `GET /api/events`, `/stats`, `/activity`, `/:id`, `/:id/activity`.
+- [ ] Server: `data.mock.ts` still used by products, clients and payments → Supabase tables + async repositories (`pg` pool). `GET /api/events/:id` has no nested `products` until the `products` table exists.
+- [ ] Server: events follow-ups: `POST /api/events`, `PATCH /api/events/:id/occupancy`, realtime broadcasts, image uploads.
 - [x] Server: `src/db/db.ts` (pool + `initDb`, table `profiles`), `src/lib/supabase.ts`, `src/shared/types.ts`, `npm run db:init`.
 - [ ] Server: `src/lib/realtime.ts` does not exist.
 - [x] Server: `authMiddleware` + `requireRole('admin')` exist. The mock routes (`/api/products`, `/api/clients`, `/api/payments`) stay public because the teammate's user app still uses them.

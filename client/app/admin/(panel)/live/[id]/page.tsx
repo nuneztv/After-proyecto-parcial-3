@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useEvents } from '@/contexts/admin/EventsProvider';
 import { useActivity } from '@/contexts/admin/ActivityProvider';
-import { getCapacityPercent } from '@/lib/admin/capacity';
+import { getCapacityPercent, getCapacityTag } from '@/lib/admin/capacity';
 import { PageHeader } from '@/components/admin/PageHeader/PageHeader';
 import { StatusBadge } from '@/components/admin/StatusBadge/StatusBadge';
 import { ActivityList } from '@/components/admin/ActivityList/ActivityList';
@@ -13,19 +13,18 @@ import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
 const LiveControlPage = () => {
   const { id } = useParams<{ id: string }>();
   const { selectedEvent, eventLoading, eventError, loadEvent } = useEvents();
-  const { eventActivities, loadEventActivity } = useActivity();
+  const { eventActivities, eventActivityLoading, eventActivityError, loadEventActivity } =
+    useActivity();
 
+  // The providers ignore stale responses, so switching ids never shows the previous event
   useEffect(() => {
-    loadEvent(id);
-    loadEventActivity(id);
+    void loadEvent(id);
+    void loadEventActivity(id);
   }, [id, loadEvent, loadEventActivity]);
 
   const event = selectedEvent?.id === id ? selectedEvent : null;
   const percent = event ? getCapacityPercent(event.attendees, event.capacity) : 0;
-
-  let tag = '';
-  if (percent >= 100) tag = 'FULL';
-  else if (percent >= 80) tag = 'ALMOST FULL';
+  const tag = getCapacityTag(percent);
 
   return (
     <>
@@ -59,7 +58,14 @@ const LiveControlPage = () => {
           </div>
 
           <h2 className="live-activity-title">Live Activity</h2>
-          <ActivityList activities={eventActivities} bordered />
+          {eventActivityLoading && <EmptyState title="Loading activity..." />}
+          {eventActivityError && (
+            <EmptyState title="Something went wrong" subtitle={eventActivityError} />
+          )}
+          {!eventActivityLoading && !eventActivityError && eventActivities.length === 0 && (
+            <EmptyState title="No activity yet" />
+          )}
+          {eventActivities.length > 0 && <ActivityList activities={eventActivities} bordered />}
         </>
       )}
     </>

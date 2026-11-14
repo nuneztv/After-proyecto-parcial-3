@@ -15,7 +15,9 @@ export const SelectedEventCard = ({ event }: { event: AfterEvent }) => {
         />
         <div>
           <p className="map-card__big">{event.location}</p>
-          <p className="map-card__small">{event.distance}</p>
+          <p className="map-card__small">
+            {event.date} · {event.startTime}
+          </p>
           <span className="map-card__button map-card__button--small">
             Start walking
           </span>

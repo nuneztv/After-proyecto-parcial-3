@@ -4,6 +4,7 @@ import { CLIENT_ORIGIN, isDatabaseConfigured, NODE_ENV, PORT } from './config';
 import { initDb } from './db/db';
 import { errorsMiddleware } from './middlewares/errorsMiddleware';
 import { router as authRouter } from './features/auth/auth.router';
+import { router as eventsRouter } from './features/events/event.router';
 import { router as productsRouter } from './features/products/product.router';
 import { router as clientsRouter } from './features/clients/client.router';
 import { router as paymentsRouter } from './features/payments/payment.router';
@@ -22,6 +23,7 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/events', eventsRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/payments', paymentsRouter);

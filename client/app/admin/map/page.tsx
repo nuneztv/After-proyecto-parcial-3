@@ -7,25 +7,16 @@ import { CurrentLocationCard } from '@/components/admin/CurrentLocationCard/Curr
 import { SelectedEventCard } from '@/components/admin/SelectedEventCard/SelectedEventCard';
 import { useEvents } from '@/contexts/admin/EventsProvider';
 import { PrivateRoute } from '@/components/admin/PrivateRoute/PrivateRoute';
+import { toMapPins } from '@/lib/admin/map';
 
 const MapView = dynamic(() => import('@/components/MapView').then((mod) => mod.MapView), {
   ssr: false,
 });
 
 const MapPage = () => {
-  const { events } = useEvents();
+  const { mapEvents } = useEvents();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const mapEvents = useMemo(() => events.filter((event) => event.status !== 'closed'), [events]);
-  const pins = useMemo(
-    () =>
-      mapEvents.map((event) => ({
-        id: event.id,
-        latitude: event.latitude,
-        longitude: event.longitude,
-        mapLabel: event.name,
-      })),
-    [mapEvents]
-  );
+  const pins = useMemo(() => toMapPins(mapEvents), [mapEvents]);
   const selectedEvent = mapEvents.find((event) => event.id === selectedId);
 
   return (
