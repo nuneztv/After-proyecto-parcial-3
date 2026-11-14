@@ -34,6 +34,7 @@ profiles(
   id uuid pk references auth.users(id) on delete cascade,
   full_name text not null,
   username text unique not null,
+  email text not null,
   avatar_url text,
   role text not null default 'client' check (role in ('client','admin')),
   created_at timestamptz not null default now()
@@ -111,8 +112,10 @@ Notes:
 
 | Method + path | Auth | Purpose |
 |---------------|------|---------|
-| `POST /api/auth/register` | no | Supabase `signUp` + insert `profiles` row (role `client`, or `admin` from the admin register screen only if allowed) |
-| `POST /api/auth/login` | no | returns `{ user, accessToken, refreshToken, expiresAt }` |
+| `POST /api/auth/register` | no | Supabase `signUp` + `profiles` row with role `client` → `201 { user, session }` (`session` null if email confirmation is on) |
+| `POST /api/auth/admin/register` | no | same with role `admin`; `403` when `ADMIN_SIGNUP_ENABLED=false` |
+| `POST /api/auth/login` | no | `200 { user, session: { accessToken, refreshToken, expiresAt } }`; `401` wrong credentials |
+| `POST /api/auth/admin/login` | no | same, `403` if the account is not `admin` |
 | `POST /api/auth/refresh` | no | `{ refreshToken }` → new session (used by the axios interceptor) |
 | `GET /api/auth/me` | yes | current profile |
 | `GET /api/events` | yes | list with filters `?search=&category=&status=` |
@@ -158,11 +161,11 @@ Notes:
 Admin-side gaps (this developer):
 
 - [ ] `contexts/admin/EventsProvider`, `ActivityProvider`, `ProfileProvider` read `lib/events.ts` / hard-coded data → load from `/api/events`, `/api/events/stats`, `/api/events/:id/activity`, `/api/auth/me`.
-- [ ] Admin login/register do nothing (`router.push`) and inputs are uncontrolled (`AuthForm`, `AuthInput`) → `AdminAuthProvider` + controlled inputs + validation + loading.
-- [ ] Admin routes are not protected → `components/admin/PrivateRoute` with `role="admin"` in `app/admin/(panel)/layout.tsx` and the other admin pages.
-- [ ] Admin logout is a `<Link href="/login">` → `logout()` that clears the session.
-- [ ] No admin axios instance with token + refresh interceptor → `lib/admin/axios.ts`; no `lib/admin/config.ts`.
-- [ ] No toasts in admin → `contexts/admin/ToastProvider.tsx`.
+- [x] Admin login/register do nothing (`router.push`) and inputs are uncontrolled (`AuthForm`, `AuthInput`) → `AdminAuthProvider` + controlled inputs + validation + loading.
+- [x] Admin routes are not protected → `components/admin/PrivateRoute` with `role="admin"` in `app/admin/(panel)/layout.tsx` and the other admin pages.
+- [x] Admin logout is a `<Link href="/login">` → `logout()` that clears the session.
+- [x] No admin axios instance with token + refresh interceptor → `lib/admin/axios.ts`; no `lib/admin/config.ts`.
+- [x] No toasts in admin → `contexts/admin/ToastProvider.tsx`.
 - [ ] `/admin/events/new` form does nothing → `createEvent` with validation, `creating` flag, image upload.
 - [ ] Live control has no occupancy actions and no realtime → `PATCH /api/events/:id/occupancy` + Broadcast `event-updated` / `activity-created` handled in admin providers.
 - [ ] Admin stats computed on the client → `GET /api/events/stats` (CTE).
@@ -170,11 +173,13 @@ Admin-side gaps (this developer):
 All gaps (server ones are this developer's too):
 
 - [ ] Server: `data.mock.ts` in every feature → Supabase tables + async repositories (`pg` pool).
-- [ ] Server: `src/db/db.ts` (pool + `initDb`), `src/lib/supabase.ts`, `src/lib/realtime.ts`, `src/shared/` do not exist.
-- [ ] Server: `authMiddleware` + `requireRole('admin')` do not exist; every route is public.
-- [ ] Server: `app.ts` both builds the app and listens → split into `app.ts` + `index.ts` so tests can import the app.
-- [ ] Server: no `typecheck`, `lint`, `test` scripts; `dev` uses `ts-node` (switch to `tsx watch src/index.ts`).
-- [ ] Server: `.env.example` missing (`PORT`, `CLIENT_ORIGIN`, `DB_*`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `IMAGES_BUCKET`).
+- [x] Server: `src/db/db.ts` (pool + `initDb`, table `profiles`), `src/lib/supabase.ts`, `src/shared/types.ts`, `npm run db:init`.
+- [ ] Server: `src/lib/realtime.ts` does not exist.
+- [x] Server: `authMiddleware` + `requireRole('admin')` exist. The mock routes (`/api/products`, `/api/clients`, `/api/payments`) stay public because the teammate's user app still uses them.
+- [x] Server: `app.ts` only listens when run directly (`require.main === module`), so tests and Vercel import it without opening a port. Kept as one entry file on purpose (the Vercel deploy uses `src/app.ts`), instead of the `index.ts` split in `env-config.md`.
+- [x] Server: `typecheck`, `test` scripts; `dev` is `tsx watch src/app.ts`.
+- [ ] Server: no ESLint config / `lint` script.
+- [x] Server: `.env.example` missing (`PORT`, `CLIENT_ORIGIN`, `DB_*`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `IMAGES_BUCKET`).
 - [ ] Client: `.env.example` missing (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`); `lib/config.ts` missing (env read inside `AxiosProvider`).
 - [ ] Client: fake login with `DEMO_PASSWORDS`; no token, no refresh interceptor, no session-expired handling.
 - [ ] Client: admin login/register/logout do nothing; admin routes are not protected.

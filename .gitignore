@@ -24,3 +24,6 @@ node_modules/
 
 # Claude Code: personal settings stay local; .claude/settings.json is shared
 .claude/settings.local.json
+
+/server/.env.example
+/client/.env.example

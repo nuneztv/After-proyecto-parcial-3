@@ -1025,3 +1025,82 @@
   min-height: 0;
   position: relative;
 }
+
+/* Toasts (ToastViewport). Absolute inside .admin-app so they stay within the phone frame */
+.admin-app .toast-viewport {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 1000;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.admin-app .toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(27, 18, 40, 0.16);
+  border-left: 5px solid var(--violet);
+  pointer-events: auto;
+  animation: toast-in 0.2s ease-out;
+}
+
+.admin-app .toast--success {
+  border-left-color: #2bb673;
+}
+
+.admin-app .toast--error {
+  border-left-color: #e5484d;
+}
+
+.admin-app .toast__message {
+  flex: 1;
+}
+
+.admin-app .toast__close {
+  border: 0;
+  background: transparent;
+  color: var(--grey);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* Client-side validation message inside the auth card */
+.admin-app .form-error {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #fdecee;
+  color: #c4282d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Profile photo fallback when the admin has no avatar */
+.admin-app .profile-header__initials {
+  display: grid;
+  place-items: center;
+  background: var(--pink-light);
+  color: var(--primary);
+  font-size: 36px;
+  font-weight: 800;
+}

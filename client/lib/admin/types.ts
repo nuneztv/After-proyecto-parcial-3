@@ -33,12 +33,57 @@ export interface Activity {
   message: string;
 }
 
+// View model used by the admin screens (header, avatar, profile page)
 export interface Profile {
-  id: number;
+  id: string;
   name: string;
   username: string;
   email: string;
   role: string;
   initials: string;
-  avatar: string;
+  avatar: string | null;
+}
+
+export type Role = 'client' | 'admin';
+
+// Mirrors the server's Profile (GET /api/auth/me, login and register responses)
+export interface AdminUser {
+  id: string;
+  fullName: string;
+  username: string;
+  email: string;
+  avatarUrl: string | null;
+  role: Role;
+  createdAt: string;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  // Unix seconds
+  expiresAt: number;
+}
+
+export interface AuthResponse {
+  user: AdminUser;
+  // null when Supabase requires email confirmation before the first login
+  session: AuthTokens | null;
+}
+
+export interface AdminSession extends AuthTokens {
+  user: AdminUser;
+}
+
+export interface RegisterInput {
+  fullName: string;
+  email: string;
+  password: string;
+}
+
+export type ToastType = 'success' | 'error' | 'info';
+
+export interface Toast {
+  id: number;
+  message: string;
+  type: ToastType;
 }
