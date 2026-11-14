@@ -40,3 +40,47 @@ export const seedStats: EventStats = {
   eventsToday: 5,
   capacityPercent: 57,
 };
+
+// Body the admin form sends for POST /api/events (all fields filled)
+export const createEventBody = {
+  title: 'Salsa Night',
+  description: 'Live salsa band until late.',
+  venueName: 'La Topa Tolondra',
+  address: 'Calle 5 #13-27, Cali',
+  startsAt: '2026-11-20T21:00:00-05:00',
+  endsAt: '2026-11-21T03:00:00-05:00',
+  latitude: 3.4495,
+  longitude: -76.5385,
+  capacity: 250,
+  categories: ['music', 'party'],
+};
+
+export const createdEvent: Event = {
+  id: 'e0000000-0000-4000-8000-000000000002',
+  title: 'Salsa Night',
+  description: 'Live salsa band until late.',
+  venueName: 'La Topa Tolondra',
+  address: 'Calle 5 #13-27, Cali',
+  imageUrl: null,
+  categories: ['music', 'party'],
+  status: 'open',
+  startsAt: '2026-11-21T02:00:00.000Z',
+  endsAt: '2026-11-21T08:00:00.000Z',
+  latitude: 3.4495,
+  longitude: -76.5385,
+  capacity: 250,
+  occupied: 0,
+  rating: 0,
+  section: null,
+  mapLabel: null,
+  createdAt: '2026-11-14T12:00:00.000Z',
+};
+
+export const checkedInEvent: Event = { ...rooftopEvent, occupied: 343 };
+
+export const checkInActivity: EventActivity = {
+  id: 'a0000000-0000-4000-8000-000000000002',
+  eventId: EVENT_ID,
+  message: '+1 check-in at Rooftop Sessions (343/400)',
+  createdAt: '2026-11-14T23:30:00.000Z',
+};

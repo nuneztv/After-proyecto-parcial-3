@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { isRemoteImage } from '@/lib/admin/images';
 import type { AfterEvent } from '@/lib/admin/types';
 import { StatusBadge } from '../StatusBadge/StatusBadge';
 import { CapacityBar } from '../CapacityBar/CapacityBar';
@@ -14,6 +15,7 @@ export const EventCard = ({ event, liveControl = false }: EventCardProps) => {
     <>
       <Image
         src={event.image}
+        unoptimized={isRemoteImage(event.image)}
         alt={event.name}
         width={600}
         height={300}

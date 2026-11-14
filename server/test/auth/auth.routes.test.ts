@@ -1,10 +1,30 @@
 import assert from 'node:assert/strict';
-import { before, test } from 'node:test';
+import { before, mock, test } from 'node:test';
 import { Express } from 'express';
 import request from 'supertest';
 
-// Validation and missing-auth failures happen before any Supabase or database call,
-// so the real app can be used without mocks.
+// Validation and missing-auth failures happen before any Supabase or database call.
+// Supabase and Realtime are still replaced by guards, so a request that reached them by
+// mistake fails the test instead of calling the real project that dotenv configures.
+const unexpectedSupabaseCall = (): never => {
+  throw new Error('Supabase must not be called in auth route tests');
+};
+
+mock.module('../../src/lib/supabase', {
+  namedExports: { getSupabase: unexpectedSupabaseCall, createAuthClient: unexpectedSupabaseCall },
+});
+mock.module('../../src/lib/realtime', {
+  namedExports: {
+    broadcast: unexpectedSupabaseCall,
+    EVENTS_CHANNEL: 'events',
+    REALTIME_EVENTS: {
+      eventCreated: 'event-created',
+      eventUpdated: 'event-updated',
+      activityCreated: 'activity-created',
+    },
+  },
+});
+
 let app: Express;
 
 before(async () => {

@@ -9,12 +9,15 @@ import { PageHeader } from '@/components/admin/PageHeader/PageHeader';
 import { StatusBadge } from '@/components/admin/StatusBadge/StatusBadge';
 import { ActivityList } from '@/components/admin/ActivityList/ActivityList';
 import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
+import { OccupancyControl } from '@/components/admin/OccupancyControl/OccupancyControl';
+import { useOccupancy } from '@/hooks/admin/useOccupancy';
 
 const LiveControlPage = () => {
   const { id } = useParams<{ id: string }>();
   const { selectedEvent, eventLoading, eventError, loadEvent } = useEvents();
   const { eventActivities, eventActivityLoading, eventActivityError, loadEventActivity } =
     useActivity();
+  const { changeOccupancy, updating } = useOccupancy();
 
   // The providers ignore stale responses, so switching ids never shows the previous event
   useEffect(() => {
@@ -25,6 +28,10 @@ const LiveControlPage = () => {
   const event = selectedEvent?.id === id ? selectedEvent : null;
   const percent = event ? getCapacityPercent(event.attendees, event.capacity) : 0;
   const tag = getCapacityTag(percent);
+
+  const handleOccupancyChange = (delta: number) => {
+    if (event) void changeOccupancy(event.id, delta);
+  };
 
   return (
     <>
@@ -56,6 +63,13 @@ const LiveControlPage = () => {
               <div className="capacity__fill" style={{ width: `${percent}%` }} />
             </div>
           </div>
+
+          <OccupancyControl
+            occupied={event.attendees}
+            capacity={event.capacity}
+            updating={updating}
+            onChange={handleOccupancyChange}
+          />
 
           <h2 className="live-activity-title">Live Activity</h2>
           {eventActivityLoading && <EmptyState title="Loading activity..." />}

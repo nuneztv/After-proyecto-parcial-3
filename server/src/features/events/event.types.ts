@@ -46,3 +46,29 @@ export interface EventFilters {
   category: EventCategory | 'all';
   status: EventStatus | 'all';
 }
+
+export interface CreateEventDTO {
+  title: string;
+  description: string;
+  venueName: string;
+  address: string;
+  startsAt: string;
+  endsAt: string | null;
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  categories: EventCategory[];
+  // Public URL returned by POST /api/uploads/images; ownership is checked in the controller
+  imageUrl: string | null;
+}
+
+export interface OccupancyUpdate {
+  event: Event;
+  activity: EventActivity;
+}
+
+// The repository reports outcomes; the service turns them into HTTP errors
+export type OccupancyUpdateResult =
+  | { kind: 'ok'; event: Event; activity: EventActivity }
+  | { kind: 'not-found' }
+  | { kind: 'out-of-range' };

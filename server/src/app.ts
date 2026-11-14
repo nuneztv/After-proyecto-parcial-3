@@ -2,12 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import { CLIENT_ORIGIN, isDatabaseConfigured, NODE_ENV, PORT } from './config';
 import { initDb } from './db/db';
+import { ensureImagesBucket } from './lib/storage';
 import { errorsMiddleware } from './middlewares/errorsMiddleware';
 import { router as authRouter } from './features/auth/auth.router';
 import { router as eventsRouter } from './features/events/event.router';
 import { router as productsRouter } from './features/products/product.router';
 import { router as clientsRouter } from './features/clients/client.router';
 import { router as paymentsRouter } from './features/payments/payment.router';
+import { router as uploadsRouter } from './features/uploads/upload.router';
 
 const app = express();
 
@@ -27,6 +29,7 @@ app.use('/api/events', eventsRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/api/uploads', uploadsRouter);
 
 app.use(errorsMiddleware);
 
@@ -45,6 +48,9 @@ const start = (): void => {
     } catch (error) {
       console.error('initDb failed', error);
     }
+
+    // Never throws: a missing bucket is logged and only image uploads are affected
+    await ensureImagesBucket();
   });
 };
 

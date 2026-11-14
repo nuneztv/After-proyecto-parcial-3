@@ -23,7 +23,7 @@ Both apps talk to the same Express API (`/api/*`). Supabase is used **through th
 | User login | fake: fetches all clients and compares against `DEMO_PASSWORDS` in `AuthProvider` | `client/contexts/AuthProvider.tsx` |
 | Admin login/register | Supabase Auth via `/api/auth/admin/*`, session + refresh in `lib/admin/axios.ts` | `client/contexts/admin/AdminAuthProvider.tsx` |
 | Admin events / activity / profile | from `/api/events`, `/api/events/stats`, `/api/events/activity`, `/api/auth/me` | `client/contexts/admin/*Provider.tsx` |
-| Create event | form does nothing | `client/app/admin/events/new/page.tsx` |
+| Create event | `POST /api/events` via admin `EventsProvider.createEvent`; form draft in `EventDraftProvider`, location picked on `/admin/map` (Leaflet `LocationPicker`) | `client/components/admin/NewEventForm/`, `client/contexts/admin/EventDraftProvider.tsx` |
 
 ## Target database (Supabase Postgres)
 
@@ -120,14 +120,14 @@ Notes:
 | `GET /api/auth/me` | yes | current profile |
 | `GET /api/events` | yes | list with filters `?search=&category=&status=` |
 | `GET /api/events/:id` | yes | event with nested `products` (`json_build_object` / `json_agg`) |
-| `POST /api/events` | admin | create event (+ broadcast `event-created`) |
+| `POST /api/events` | admin | create event, optional `imageUrl` (must be the caller's own upload: `isUserImageUrl`, else `400 "Invalid image URL"`) (+ broadcast `event-created`) |
 | `PATCH /api/events/:id/occupancy` | admin | change `occupied` (+ activity row, broadcast `event-updated`, `activity-created`) |
 | `GET /api/events/stats` | admin | `peopleNow`, `activeEvents`, `eventsToday`, `capacityPercent` in one CTE query |
 | `GET /api/events/:id/activity` | admin | activity feed |
 | `GET /api/products`, `GET /api/products/:id` | yes | tickets (with nested `event`) |
 | `GET /api/payments` | yes | **current user's** payments with nested `product` and `event` |
 | `GET /api/saved-events`, `POST /api/saved-events/:eventId`, `DELETE /api/saved-events/:eventId` | yes | saved events of the current user |
-| `POST /api/uploads/images` | admin | event image → Supabase Storage |
+| `POST /api/uploads/images` | admin | multipart field `image` (JPEG/PNG/WebP, max 5 MB) → Supabase Storage bucket `IMAGES_BUCKET` (default `event-images`, public, created at startup if missing) at `<userId>/<uuid>.<ext>` → `201 { url }`; `400 "Image is required"`, `413 "Image must be at most 5 MB"`, `415 "Only JPEG, PNG or WebP images are allowed"`, `502 "Image upload failed"` |
 
 `GET /api/clients` (list of every user) disappears from the client app: it leaks every profile. Keep it admin-only if needed.
 
@@ -137,8 +137,10 @@ Notes:
 |---------|-------|---------|------------|------------|
 | `events` | `event-created` | `Event` | `createEventService` | user `EventsProvider`, admin `EventsProvider` |
 | `events` | `event-updated` | `Event` | `updateOccupancyService` | user `EventsProvider`, admin `EventsProvider` |
+| `events` | `activity-created` | `EventActivity` (has `eventId`) | `updateOccupancyService` | admin `ActivityProvider` |
 | `events` | `event-deleted` | `{ id }` | `deleteEventService` | both `EventsProvider`s |
-| `event:<id>` | `activity-created` | `Activity` | `updateOccupancyService` | admin `ActivityProvider` |
+
+One public channel `events` (`EVENTS_CHANNEL`, names in `REALTIME_EVENTS`, `server/src/lib/realtime.ts`). `event-deleted` is not emitted yet (no delete endpoint). `broadcast()` uses `channel.httpSend` (REST, no websocket), is fire-and-forget (never throws, logs failures), is skipped when Supabase is not configured, and is only called after the write succeeded (after COMMIT for occupancy).
 
 ## Target client providers
 
@@ -166,17 +168,18 @@ Admin-side gaps (this developer):
 - [x] Admin logout is a `<Link href="/login">` → `logout()` that clears the session.
 - [x] No admin axios instance with token + refresh interceptor → `lib/admin/axios.ts`; no `lib/admin/config.ts`.
 - [x] No toasts in admin → `contexts/admin/ToastProvider.tsx`.
-- [ ] `/admin/events/new` form does nothing → `createEvent` with validation, `creating` flag, image upload.
-- [ ] Live control has no occupancy actions and no realtime → `PATCH /api/events/:id/occupancy` + Broadcast `event-updated` / `activity-created` handled in admin providers.
+- [x] `/admin/events/new` form does nothing → `NewEventForm` (controlled, `validateEventDraft` field errors, `creating` flag) + `EventsProvider.createEvent` (`POST /api/events`); draft kept in `EventDraftProvider` while the location is picked on `/admin/map` (`LocationPicker`, Leaflet; "Use map center" button + Enter/Space on the focused map for keyboard users). Image upload done: `hooks/admin/useImageUpload` (client pre-check with `lib/admin/images.ts`, `POST /api/uploads/images` as `FormData` field `image`, `uploading` + error toast) → controlled `ImageUpload` preview → `EventDraft.imageUrl` (survives the map round trip) → `imageUrl` in `POST /api/events`. Remote (Supabase) images render with `next/image` `unoptimized` (`isRemoteImage`), so `next.config.js` needs no `remotePatterns`.
+- [ ] Live control has no occupancy actions and no realtime → `PATCH /api/events/:id/occupancy` + Broadcast `event-updated` / `activity-created` handled in admin providers. Server endpoint done (transactional `updateOccupancyRepository`, 404/409). Admin UI done: `OccupancyControl` (−5/−1/+1/+5) on `/admin/live/[id]` via `hooks/admin/useOccupancy` (`EventsProvider.updateOccupancy` + `ActivityProvider.addActivity`). Server broadcasts done; admin subscriptions still pending (other admins/devices only see changes after a reload).
 - [x] Admin stats computed on the client → `GET /api/events/stats` (CTE, `getEventStatsRepository`, Bogota day), called by the admin `EventsProvider` (`stats`, shown by `StatsGrid`).
 
 All gaps (server ones are this developer's too):
 
 - [x] Server: events → tables `events` + `event_activity` in `initDb` (seeded from the old client catalog in `src/db/seed.ts`), async `features/events/event.repository.ts`, read routes `GET /api/events`, `/stats`, `/activity`, `/:id`, `/:id/activity`.
 - [ ] Server: `data.mock.ts` still used by products, clients and payments → Supabase tables + async repositories (`pg` pool). `GET /api/events/:id` has no nested `products` until the `products` table exists.
-- [ ] Server: events follow-ups: `POST /api/events`, `PATCH /api/events/:id/occupancy`, realtime broadcasts, image uploads.
+- [x] Server: `POST /api/events` (admin, `parseCreateEventBody`, 201) and `PATCH /api/events/:id/occupancy` (admin, `{ delta }` -50..50, one transaction with `SELECT ... FOR UPDATE` + activity row, 200 `{ event, activity }`, 404/409).
+- [x] Server: events follow-ups: realtime broadcasts (`event-created`, `event-updated`, `activity-created` on channel `events`), image uploads (`POST /api/uploads/images`, `lib/storage.ts` with `ensureImagesBucket` + `isUserImageUrl`, `middlewares/uploadMiddleware.ts`), `imageUrl` on `POST /api/events`.
 - [x] Server: `src/db/db.ts` (pool + `initDb`, table `profiles`), `src/lib/supabase.ts`, `src/shared/types.ts`, `npm run db:init`.
-- [ ] Server: `src/lib/realtime.ts` does not exist.
+- [x] Server: `src/lib/realtime.ts` (`broadcast`, `EVENTS_CHANNEL`, `REALTIME_EVENTS`).
 - [x] Server: `authMiddleware` + `requireRole('admin')` exist. The mock routes (`/api/products`, `/api/clients`, `/api/payments`) stay public because the teammate's user app still uses them.
 - [x] Server: `app.ts` only listens when run directly (`require.main === module`), so tests and Vercel import it without opening a port. Kept as one entry file on purpose (the Vercel deploy uses `src/app.ts`), instead of the `index.ts` split in `env-config.md`.
 - [x] Server: `typecheck`, `test` scripts; `dev` is `tsx watch src/app.ts`.
@@ -191,4 +194,5 @@ All gaps (server ones are this developer's too):
 - [ ] Client: pages contain logic (filtering in `home/page.tsx`, payment filtering in `profile/page.tsx`) → move to providers.
 - [ ] Client: `AuthForm.onSubmit` and form fields are uncontrolled → controlled inputs with validation.
 - [ ] Client: no `typecheck`/`test` scripts and no ESLint config file (`npm run lint` fails until `eslint.config.mjs` exists).
-- [ ] Realtime: nothing emitted or subscribed yet (see contract above).
+- [x] Realtime (admin): `client/lib/admin/{config,supabase,realtime}.ts` (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, lazy browser-only client, `subscribeToEventsChannel` = one shared ref-counted `events` channel that fans out to every subscriber and calls `removeChannel` when the last one leaves). Admin `EventsProvider` upserts on `event-created` / `event-updated` (also the selected event, invalidating an in-flight GET) + debounced stats refresh; `ActivityProvider` feeds `activity-created` into `addActivity` (dedupe by id). Skipped silently when not configured.
+- [ ] Realtime (user app): no user-app provider subscribes yet.

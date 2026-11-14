@@ -1,12 +1,22 @@
 import { Request, Response } from 'express';
+import { getUserFromRequest } from '../../middlewares/authMiddleware';
 import {
+  createEventService,
   getEventActivityService,
   getEventByIdService,
   getEventsService,
   getEventStatsService,
   getRecentActivityService,
+  updateOccupancyService,
 } from './event.service';
-import { parseActivityLimit, parseEventFilters, parseEventId } from './event.validation';
+import {
+  ensureOwnImageUrl,
+  parseActivityLimit,
+  parseCreateEventBody,
+  parseEventFilters,
+  parseEventId,
+  parseOccupancyDelta,
+} from './event.validation';
 
 const RECENT_ACTIVITY_DEFAULT_LIMIT = 20;
 const EVENT_ACTIVITY_DEFAULT_LIMIT = 50;
@@ -34,4 +44,20 @@ export const getEventActivityController = async (req: Request, res: Response) =>
   const limit = parseActivityLimit(req.query.limit, EVENT_ACTIVITY_DEFAULT_LIMIT);
 
   res.status(200).json(await getEventActivityService(eventId, limit));
+};
+
+export const createEventController = async (req: Request, res: Response) => {
+  const user = getUserFromRequest(req);
+  const dto = parseCreateEventBody(req.body);
+
+  ensureOwnImageUrl(dto.imageUrl, user.id);
+
+  res.status(201).json(await createEventService(dto, user.id));
+};
+
+export const updateOccupancyController = async (req: Request, res: Response) => {
+  const eventId = parseEventId(req.params.id);
+  const delta = parseOccupancyDelta(req.body);
+
+  res.status(200).json(await updateOccupancyService(eventId, delta));
 };

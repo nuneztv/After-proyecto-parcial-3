@@ -1,6 +1,4 @@
-import type { AfterEvent } from '@/lib/admin/types';
-
-const BOUNDS = { west: -76.55, east: -76.51, north: 3.47, south: 3.44 };
+import type { AfterEvent, EventLocation } from '@/lib/admin/types';
 
 export interface MapPinData {
   id: string;
@@ -9,13 +7,7 @@ export interface MapPinData {
   mapLabel: string;
 }
 
-export const getPinPosition = (event: AfterEvent) => {
-  const left = ((event.longitude - BOUNDS.west) / (BOUNDS.east - BOUNDS.west)) * 100;
-  const top = ((BOUNDS.north - event.latitude) / (BOUNDS.north - BOUNDS.south)) * 100;
-  return { left: `${left}%`, top: `${top}%` };
-};
-
-// Shape expected by the shared MapView component
+// Reference markers shown by the admin LocationPicker
 export const toMapPins = (events: AfterEvent[]): MapPinData[] =>
   events.map((event) => ({
     id: event.id,
@@ -23,3 +15,11 @@ export const toMapPins = (events: AfterEvent[]): MapPinData[] =>
     longitude: event.longitude,
     mapLabel: event.name,
   }));
+
+// Cali city center: where the location picker opens when nothing is selected yet
+export const CALI_CENTER: EventLocation = { latitude: 3.4516, longitude: -76.532 };
+
+const COORDINATE_DECIMALS = 5;
+
+export const formatLocation = (location: EventLocation): string =>
+  `${location.latitude.toFixed(COORDINATE_DECIMALS)}, ${location.longitude.toFixed(COORDINATE_DECIMALS)}`;

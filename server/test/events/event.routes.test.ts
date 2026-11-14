@@ -4,7 +4,18 @@ import { before, beforeEach, mock, test } from 'node:test';
 import { Express } from 'express';
 import request from 'supertest';
 import { asyncMock } from '../helpers/supabaseMocks';
-import { EVENT_ID, MISSING_EVENT_ID, rooftopActivity, rooftopEvent, seedStats } from '../helpers/eventFixtures';
+import { ownImageUrl, testConfig } from '../helpers/configMock';
+import {
+  checkedInEvent,
+  checkInActivity,
+  createEventBody,
+  createdEvent,
+  EVENT_ID,
+  MISSING_EVENT_ID,
+  rooftopActivity,
+  rooftopEvent,
+  seedStats,
+} from '../helpers/eventFixtures';
 
 const getUser = asyncMock();
 const getProfileRoleService = asyncMock();
@@ -13,7 +24,11 @@ const getEventByIdService = asyncMock();
 const getEventStatsService = asyncMock();
 const getEventActivityService = asyncMock();
 const getRecentActivityService = asyncMock();
+const createEventService = asyncMock();
+const updateOccupancyService = asyncMock();
 
+// Fixed config: imageUrl ownership is checked against SUPABASE_URL, and the real one must not leak in
+mock.module('../../src/config', { namedExports: testConfig });
 mock.module('../../src/lib/supabase', {
   namedExports: { getSupabase: () => ({ auth: { getUser } }), createAuthClient: mock.fn() },
 });
@@ -27,6 +42,8 @@ mock.module('../../src/features/events/event.service', {
     getEventStatsService,
     getEventActivityService,
     getRecentActivityService,
+    createEventService,
+    updateOccupancyService,
   },
 });
 
@@ -50,6 +67,8 @@ beforeEach(() => {
     getEventStatsService,
     getEventActivityService,
     getRecentActivityService,
+    createEventService,
+    updateOccupancyService,
   ].forEach((fn) => fn.mock.resetCalls());
 });
 
@@ -236,3 +255,268 @@ test('GET /api/events/:id/activity answers 404 when the event does not exist', a
 
   assert.equal(res.status, 404);
 });
+
+test('POST /api/events answers 401 without a token', async () => {
+  const res = await request(app).post('/api/events').send(createEventBody);
+
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/events answers 403 for a client token', async () => {
+  asRole('client');
+
+  const res = await request(app)
+    .post('/api/events')
+    .set('Authorization', 'Bearer valid')
+    .send(createEventBody);
+
+  assert.equal(res.status, 403);
+});
+
+test('POST /api/events does not call the service for a client token', async () => {
+  asRole('client');
+
+  await request(app).post('/api/events').set('Authorization', 'Bearer valid').send(createEventBody);
+
+  assert.equal(createEventService.mock.callCount(), 0);
+});
+
+test('POST /api/events answers 400 "Title is required" for an admin with a body without title', async () => {
+  asRole('admin');
+
+  const res = await request(app)
+    .post('/api/events')
+    .set('Authorization', 'Bearer valid')
+    .send({ ...createEventBody, title: '' });
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Title is required']);
+});
+
+test('POST /api/events does not call the service for an invalid body', async () => {
+  asRole('admin');
+
+  await request(app)
+    .post('/api/events')
+    .set('Authorization', 'Bearer valid')
+    .send({ ...createEventBody, capacity: 0 });
+
+  assert.equal(createEventService.mock.callCount(), 0);
+});
+
+test('POST /api/events answers 201 with the created event for an admin', async () => {
+  asRole('admin');
+  createEventService.mock.mockImplementation(async () => createdEvent);
+
+  const res = await request(app)
+    .post('/api/events')
+    .set('Authorization', 'Bearer valid')
+    .send(createEventBody);
+
+  assert.deepEqual([res.status, res.body], [201, createdEvent]);
+});
+
+test('POST /api/events passes the parsed DTO and the token user id to the service', async () => {
+  asRole('admin');
+  createEventService.mock.mockImplementation(async () => createdEvent);
+
+  await request(app)
+    .post('/api/events')
+    .set('Authorization', 'Bearer valid')
+    .send({ ...createEventBody, title: '  Salsa Night ', categories: ['music', 'music'] });
+
+  assert.deepEqual(createEventService.mock.calls[0].arguments, [
+    {
+      title: 'Salsa Night',
+      description: 'Live salsa band until late.',
+      venueName: 'La Topa Tolondra',
+      address: 'Calle 5 #13-27, Cali',
+      startsAt: '2026-11-20T21:00:00-05:00',
+      endsAt: '2026-11-21T03:00:00-05:00',
+      latitude: 3.4495,
+      longitude: -76.5385,
+      capacity: 250,
+      categories: ['music'],
+      imageUrl: null,
+    },
+    'user-1',
+  ]);
+});
+
+test('PATCH /api/events/:id/occupancy answers 401 without a token', async () => {
+  const res = await request(app).patch(`/api/events/${EVENT_ID}/occupancy`).send({ delta: 1 });
+
+  assert.equal(res.status, 401);
+});
+
+test('PATCH /api/events/:id/occupancy answers 403 for a client token', async () => {
+  asRole('client');
+
+  const res = await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 1 });
+
+  assert.equal(res.status, 403);
+});
+
+test('PATCH /api/events/:id/occupancy answers 400 "Invalid event id" for a non-UUID id', async () => {
+  asRole('admin');
+
+  const res = await request(app)
+    .patch('/api/events/not-a-uuid/occupancy')
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 1 });
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Invalid event id']);
+});
+
+test('PATCH /api/events/:id/occupancy answers 400 for a zero delta', async () => {
+  asRole('admin');
+
+  const res = await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 0 });
+
+  assert.deepEqual(
+    [res.status, res.body.message],
+    [400, 'Delta must be a non-zero integer between -50 and 50'],
+  );
+});
+
+test('PATCH /api/events/:id/occupancy does not call the service for a string delta', async () => {
+  asRole('admin');
+
+  await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: '1' });
+
+  assert.equal(updateOccupancyService.mock.callCount(), 0);
+});
+
+test('PATCH /api/events/:id/occupancy answers 404 when the event does not exist', async () => {
+  asRole('admin');
+  updateOccupancyService.mock.mockImplementation(async () => {
+    throw Boom.notFound('Event not found');
+  });
+
+  const res = await request(app)
+    .patch(`/api/events/${MISSING_EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 1 });
+
+  assert.deepEqual([res.status, res.body.message], [404, 'Event not found']);
+});
+
+test('PATCH /api/events/:id/occupancy answers 409 when occupancy would leave the range', async () => {
+  asRole('admin');
+  updateOccupancyService.mock.mockImplementation(async () => {
+    throw Boom.conflict('Occupancy must stay between 0 and capacity');
+  });
+
+  const res = await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 50 });
+
+  assert.deepEqual(
+    [res.status, res.body.message],
+    [409, 'Occupancy must stay between 0 and capacity'],
+  );
+});
+
+test('PATCH /api/events/:id/occupancy answers 200 with the event and activity', async () => {
+  asRole('admin');
+  updateOccupancyService.mock.mockImplementation(async () => ({
+    event: checkedInEvent,
+    activity: checkInActivity,
+  }));
+
+  const res = await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: 1 });
+
+  assert.deepEqual([res.status, res.body], [200, { event: checkedInEvent, activity: checkInActivity }]);
+});
+
+test('PATCH /api/events/:id/occupancy passes the id and delta to the service', async () => {
+  asRole('admin');
+  updateOccupancyService.mock.mockImplementation(async () => ({
+    event: checkedInEvent,
+    activity: checkInActivity,
+  }));
+
+  await request(app)
+    .patch(`/api/events/${EVENT_ID}/occupancy`)
+    .set('Authorization', 'Bearer valid')
+    .send({ delta: -3 });
+
+  assert.deepEqual(updateOccupancyService.mock.calls[0].arguments, [EVENT_ID, -3]);
+});
+
+const postEvent = (body: Record<string, unknown>) =>
+  request(app).post('/api/events').set('Authorization', 'Bearer valid').send(body);
+
+const imageUrlPassed = (): unknown =>
+  (createEventService.mock.calls[0].arguments[0] as { imageUrl?: unknown }).imageUrl;
+
+test('POST /api/events answers 201 for an imageUrl in the admin\'s own image folder', async () => {
+  asRole('admin');
+  createEventService.mock.mockImplementation(async () => createdEvent);
+
+  const res = await postEvent({ ...createEventBody, imageUrl: ownImageUrl('user-1') });
+
+  assert.equal(res.status, 201);
+});
+
+test('POST /api/events passes the admin\'s own imageUrl to the service', async () => {
+  asRole('admin');
+  createEventService.mock.mockImplementation(async () => createdEvent);
+
+  await postEvent({ ...createEventBody, imageUrl: ownImageUrl('user-1') });
+
+  assert.equal(
+    imageUrlPassed(),
+    'https://test-project.supabase.co/storage/v1/object/public/event-images/user-1/f0000000-0000-4000-8000-000000000001.png',
+  );
+});
+
+for (const [label, imageUrl] of [
+  ['another user\'s image', ownImageUrl('user-2')],
+  ['a foreign URL', 'https://evil.example.com/image.png'],
+  ['garbage', 'not a url'],
+  ['a URL over 500 characters', `${ownImageUrl('user-1')}${'a'.repeat(500)}`],
+] as const) {
+  test(`POST /api/events answers 400 "Invalid image URL" for ${label}`, async () => {
+    asRole('admin');
+
+    const res = await postEvent({ ...createEventBody, imageUrl });
+
+    assert.deepEqual([res.status, res.body.message], [400, 'Invalid image URL']);
+  });
+}
+
+test('POST /api/events does not call the service for another user\'s imageUrl', async () => {
+  asRole('admin');
+
+  await postEvent({ ...createEventBody, imageUrl: ownImageUrl('user-2') });
+
+  assert.equal(createEventService.mock.callCount(), 0);
+});
+
+for (const [label, imageUrl] of [
+  ['a missing', undefined],
+  ['a null', null],
+  ['a blank', '   '],
+] as const) {
+  test(`POST /api/events passes a null imageUrl to the service for ${label} imageUrl`, async () => {
+    asRole('admin');
+    createEventService.mock.mockImplementation(async () => createdEvent);
+
+    await postEvent({ ...createEventBody, imageUrl });
+
+    assert.equal(imageUrlPassed(), null);
+  });
+}

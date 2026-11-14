@@ -123,3 +123,57 @@ export interface Toast {
   message: string;
   type: ToastType;
 }
+
+export interface EventLocation {
+  latitude: number;
+  longitude: number;
+}
+
+// Values of the "new event" form, kept as typed by the admin (strings) until submit
+export interface EventDraft {
+  title: string;
+  description: string;
+  venueName: string;
+  // 'YYYY-MM-DD' (input type="date")
+  date: string;
+  // 'HH:mm' (input type="time")
+  time: string;
+  // 'HH:mm' or '' when the event has no end time
+  endTime: string;
+  capacity: string;
+  location: EventLocation | null;
+  // Public URL returned by POST /api/uploads/images, or null when no image was uploaded
+  imageUrl: string | null;
+}
+
+// Text fields of the draft (set from inputs); location and imageUrl have their own setters
+export type EventDraftField = Exclude<keyof EventDraft, 'location' | 'imageUrl'>;
+
+// Field errors of the draft, keyed by field; an empty object means the draft is valid
+export type EventDraftErrors = Partial<Record<keyof EventDraft, string>>;
+
+// Body of POST /api/events (mirrors the server's CreateEventDTO)
+export interface CreateEventInput {
+  title: string;
+  description: string;
+  venueName: string;
+  // ISO 8601 with offset, e.g. '2026-11-20T22:00:00-05:00'
+  startsAt: string;
+  endsAt: string | null;
+  latitude: number;
+  longitude: number;
+  capacity: number;
+  // Must be an image this admin uploaded (POST /api/uploads/images); null means no image
+  imageUrl?: string | null;
+}
+
+// Response of POST /api/uploads/images
+export interface ApiUploadedImage {
+  url: string;
+}
+
+// Response of PATCH /api/events/:id/occupancy
+export interface ApiOccupancyUpdate {
+  event: ApiEvent;
+  activity: ApiActivity;
+}

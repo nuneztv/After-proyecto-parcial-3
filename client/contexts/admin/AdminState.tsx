@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { ActivityProvider } from './ActivityProvider';
 import { AdminAuthProvider } from './AdminAuthProvider';
+import { EventDraftProvider } from './EventDraftProvider';
 import { EventsProvider } from './EventsProvider';
 import { ProfileProvider } from './ProfileProvider';
 import { ToastProvider } from './ToastProvider';
@@ -15,7 +16,9 @@ export const AdminState = ({ children }: { children: ReactNode }) => {
         <AdminAuthProvider>
           <EventsProvider>
             <ActivityProvider>
-              <ProfileProvider>{children}</ProfileProvider>
+              <ProfileProvider>
+                <EventDraftProvider>{children}</EventDraftProvider>
+              </ProfileProvider>
             </ActivityProvider>
           </EventsProvider>
         </AdminAuthProvider>

@@ -1,5 +1,12 @@
 import { pool } from '../../db/db';
-import { Event, EventActivity, EventFilters, EventStats } from './event.types';
+import {
+  CreateEventDTO,
+  Event,
+  EventActivity,
+  EventFilters,
+  EventStats,
+  OccupancyUpdateResult,
+} from './event.types';
 
 const EVENT_COLUMNS = `
   e.id, e.title, e.description, e.venue_name AS "venueName", e.address,
@@ -85,4 +92,102 @@ export const findRecentActivityRepository = async (limit: number): Promise<Event
   );
 
   return result.rows;
+};
+
+// Aliasing the target table lets INSERT/UPDATE ... RETURNING reuse the same column lists
+export const createEventRepository = async (dto: CreateEventDTO, userId: string): Promise<Event> => {
+  const result = await pool.query<Event>(
+    `INSERT INTO public.events AS e
+       (title, description, venue_name, address, starts_at, ends_at,
+        latitude, longitude, capacity, categories, image_url, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING ${EVENT_COLUMNS}`,
+    [
+      dto.title,
+      dto.description,
+      dto.venueName,
+      dto.address,
+      dto.startsAt,
+      dto.endsAt,
+      dto.latitude,
+      dto.longitude,
+      dto.capacity,
+      dto.categories,
+      dto.imageUrl,
+      userId,
+    ],
+  );
+
+  return result.rows[0];
+};
+
+const buildOccupancyMessage = (delta: number, event: Event): string => {
+  const amount = Math.abs(delta);
+  const action = delta > 0 ? 'check-in' : 'check-out';
+  const sign = delta > 0 ? '+' : '-';
+
+  return `${sign}${amount} ${action}${amount === 1 ? '' : 's'} at ${event.title} (${event.occupied}/${event.capacity})`;
+};
+
+// Row lock + check + update + activity in one transaction: concurrent check-ins cannot
+// overshoot capacity and the activity feed never drifts from the stored count
+export const updateOccupancyRepository = async (
+  id: string,
+  delta: number,
+): Promise<OccupancyUpdateResult> => {
+  const client = await pool.connect();
+  let failure: Error | undefined;
+
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query<{ occupied: number; capacity: number }>(
+      'SELECT occupied, capacity FROM public.events WHERE id = $1 FOR UPDATE',
+      [id],
+    );
+    const row = current.rows[0];
+
+    if (!row) {
+      await client.query('ROLLBACK');
+      return { kind: 'not-found' };
+    }
+
+    const next = row.occupied + delta;
+
+    if (next < 0 || next > row.capacity) {
+      await client.query('ROLLBACK');
+      return { kind: 'out-of-range' };
+    }
+
+    const updated = await client.query<Event>(
+      `UPDATE public.events e SET occupied = e.occupied + $2 WHERE e.id = $1 RETURNING ${EVENT_COLUMNS}`,
+      [id, delta],
+    );
+    const event = updated.rows[0];
+
+    const inserted = await client.query<EventActivity>(
+      `INSERT INTO public.event_activity AS a (event_id, message)
+       VALUES ($1, $2)
+       RETURNING ${ACTIVITY_COLUMNS}`,
+      [id, buildOccupancyMessage(delta, event)],
+    );
+
+    await client.query('COMMIT');
+
+    return { kind: 'ok', event, activity: inserted.rows[0] };
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+
+    // A failed ROLLBACK (e.g. dropped connection) must not hide the original error
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('ROLLBACK failed', rollbackError);
+    }
+
+    throw error;
+  } finally {
+    // Passing the error makes the pool discard this connection instead of reusing it
+    client.release(failure);
+  }
 };

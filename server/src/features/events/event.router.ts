@@ -2,11 +2,13 @@ import { Router } from 'express';
 import { authMiddleware, requireRole } from '../../middlewares/authMiddleware';
 import { asyncHandler } from '../../middlewares/errorsMiddleware';
 import {
+  createEventController,
   getEventActivityController,
   getEventByIdController,
   getEventsController,
   getEventStatsController,
   getRecentActivityController,
+  updateOccupancyController,
 } from './event.controller';
 
 export const router = Router();
@@ -31,4 +33,16 @@ router.get(
   asyncHandler(authMiddleware),
   requireRole('admin'),
   asyncHandler(getEventActivityController),
+);
+router.post(
+  '/',
+  asyncHandler(authMiddleware),
+  requireRole('admin'),
+  asyncHandler(createEventController),
+);
+router.patch(
+  '/:id/occupancy',
+  asyncHandler(authMiddleware),
+  requireRole('admin'),
+  asyncHandler(updateOccupancyController),
 );

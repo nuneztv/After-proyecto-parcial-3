@@ -17,6 +17,10 @@ export const DB_PASSWORD = process.env.DB_PASSWORD || '';
 export const SUPABASE_URL = process.env.SUPABASE_URL || '';
 export const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
 
+// Supabase Storage: public bucket for event images, created at startup when missing
+export const IMAGES_BUCKET = process.env.IMAGES_BUCKET || 'event-images';
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 // Open admin self-registration (demo). Set to "false" once the real admins exist
 export const ADMIN_SIGNUP_ENABLED = process.env.ADMIN_SIGNUP_ENABLED !== 'false';
 
