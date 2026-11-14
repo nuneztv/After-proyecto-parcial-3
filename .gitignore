@@ -21,3 +21,6 @@ node_modules/
 **/.env.development.local
 **/.env.test.local
 **/.env.production.local
+
+# Claude Code: personal settings stay local; .claude/settings.json is shared
+.claude/settings.local.json
