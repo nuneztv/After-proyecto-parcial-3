@@ -4,9 +4,11 @@ import { ReactNode } from "react";
 import { AxiosProvider } from "@/contexts/AxiosProvider";
 import { AuthProvider, useAuth } from "@/contexts/AuthProvider";
 import { EventsProvider } from "@/contexts/EventsProvider";
+import { NotificationsProvider } from "@/contexts/NotificationsProvider";
 import { PaymentsProvider } from "@/contexts/PaymentsProvider";
 import { ProductsProvider } from "@/contexts/ProductsProvider";
 import { SavedEventsProvider } from "@/contexts/SavedEventsProvider";
+import { SettingsProvider } from "@/contexts/SettingsProvider";
 import { ToastProvider } from "@/contexts/ToastProvider";
 
 // Session-scoped providers are re-created per user, so nothing from one account (events,
@@ -17,9 +19,11 @@ const SessionProviders = ({ children }: { children: ReactNode }) => {
   return (
     <EventsProvider key={user?.id ?? "anonymous"}>
       <SavedEventsProvider>
-        <ProductsProvider>
-          <PaymentsProvider>{children}</PaymentsProvider>
-        </ProductsProvider>
+        <NotificationsProvider>
+          <ProductsProvider>
+            <PaymentsProvider>{children}</PaymentsProvider>
+          </ProductsProvider>
+        </NotificationsProvider>
       </SavedEventsProvider>
     </EventsProvider>
   );
@@ -28,11 +32,13 @@ const SessionProviders = ({ children }: { children: ReactNode }) => {
 export const Providers = ({ children }: { children: ReactNode }) => {
   return (
     <ToastProvider>
-      <AxiosProvider>
-        <AuthProvider>
-          <SessionProviders>{children}</SessionProviders>
-        </AuthProvider>
-      </AxiosProvider>
+      <SettingsProvider>
+        <AxiosProvider>
+          <AuthProvider>
+            <SessionProviders>{children}</SessionProviders>
+          </AuthProvider>
+        </AxiosProvider>
+      </SettingsProvider>
     </ToastProvider>
   );
 };

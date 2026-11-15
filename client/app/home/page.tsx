@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
@@ -83,7 +84,7 @@ export default function HomePage() {
                   className="mini-card"
                   onClick={() => router.push(`/events/${event.id}`)}
                 >
-                  <img src={event.imageUrl} alt={event.title} />
+                  <Image src={event.imageUrl} alt={event.title} width={200} height={150} unoptimized />
                   <span className={`mini-badge badge ${event.status}`}>{statusLabel(event.status)}</span>
                   <div className="overlay">
                     <h3>{event.title}</h3>

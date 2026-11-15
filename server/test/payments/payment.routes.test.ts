@@ -20,7 +20,12 @@ mock.module('../../src/features/profiles/profile.service', {
 });
 // The real service runs; only the database is replaced
 mock.module('../../src/features/payments/payment.repository', {
-  namedExports: { findPaymentsByUserRepository, findPaymentByIdForUserRepository },
+  namedExports: {
+    findPaymentsByUserRepository,
+    findPaymentByIdForUserRepository,
+    createPendingPaymentRepository: mock.fn(),
+    findActivePaymentForProductRepository: mock.fn(),
+  },
 });
 
 const USER_ID = 'user-1';
@@ -122,4 +127,17 @@ test('GET /api/payments/:id answers 400 for an invalid id', async () => {
 
   assert.equal(res.status, 400);
   assert.equal(res.body.message, 'Invalid payment id');
+});
+
+test('POST /api/payments answers 401 without a token', async () => {
+  const res = await request(app).post('/api/payments').send({ productId: 'b0000000-0000-4000-8000-000000000001' });
+
+  assert.equal(res.status, 401);
+});
+
+test('POST /api/payments answers 400 for an invalid product id', async () => {
+  const res = await request(app).post('/api/payments').set(auth).send({ productId: 'prod-1', amount: 1 });
+
+  assert.equal(res.status, 400);
+  assert.equal(res.body.message, 'Invalid product id');
 });

@@ -111,6 +111,12 @@ export const initDb = async (): Promise<void> => {
   await pool.query(
     'CREATE INDEX IF NOT EXISTS idx_payments_user_created ON public.payments(user_id, created_at DESC);',
   );
+  // One live reservation or purchase per user and ticket: reserving twice returns the first one.
+  // A failed payment does not block a new reservation
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_active_ticket
+      ON public.payments(user_id, product_id) WHERE status IN ('pending', 'paid');
+  `);
 
   // Same as profiles: only the server (postgres role) reads these tables
   await pool.query('ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;');

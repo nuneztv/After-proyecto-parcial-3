@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { StatusBadge } from '@/components/StatusBadge/StatusBadge';
 import { IconPin } from '@/components/Icons/Icons';
 import type { EventView } from '@/types/models';
@@ -12,7 +13,7 @@ export const EventCard = ({ event, onOpen }: EventCardProps) => {
   return (
     <article className="event-card">
       <button className="cover" onClick={() => onOpen(event.id)}>
-        <img src={event.imageUrl} alt={event.title} />
+        <Image src={event.imageUrl} alt={event.title} width={400} height={168} unoptimized />
         <StatusBadge status={event.status} />
       </button>
       <div className="card-body">

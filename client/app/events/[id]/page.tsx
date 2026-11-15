@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
@@ -55,7 +56,7 @@ export default function EventDetailPage() {
         {selectedEvent ? (
           <>
             <div className="hero-photo">
-              <img src={selectedEvent.imageUrl} alt={selectedEvent.title} />
+              <Image src={selectedEvent.imageUrl} alt={selectedEvent.title} width={400} height={250} priority unoptimized />
               <div className="float-actions">
                 <button className="round" onClick={() => router.back()} aria-label="Back">
                   <IconBack />

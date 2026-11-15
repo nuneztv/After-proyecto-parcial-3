@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen/AppScreen";
@@ -41,7 +42,7 @@ export default function SavedEventsPage() {
           ? savedEvents.map((event) => (
               <article key={event.id} className="saved-card">
                 <button className="ghost" onClick={() => router.push(`/events/${event.id}`)}>
-                  <img src={event.imageUrl} alt={event.title} />
+                  <Image src={event.imageUrl} alt={event.title} width={74} height={74} unoptimized />
                 </button>
                 <button className="ghost" onClick={() => router.push(`/events/${event.id}`)}>
                   <div className="sheet-top">
@@ -67,7 +68,7 @@ export default function SavedEventsPage() {
         {tab === "venues"
           ? savedVenues.map((event) => (
               <article key={event.venueName} className="saved-card">
-                <img src={event.imageUrl} alt={event.venueName} />
+                <Image src={event.imageUrl} alt={event.venueName} width={74} height={74} unoptimized />
                 <div>
                   <strong>{event.venueName}</strong>
                   <p className="muted">{event.address}</p>

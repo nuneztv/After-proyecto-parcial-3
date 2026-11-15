@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -64,7 +65,7 @@ export default function MapPage() {
         </div>
         {selected ? (
           <div className="map-sheet">
-            <img src={selected.imageUrl} alt={selected.venueName} />
+            <Image src={selected.imageUrl} alt={selected.venueName} width={74} height={74} unoptimized />
             <div className="sheet-copy">
               <div className="sheet-top">
                 <StatusBadge status={selected.status} className="static" />

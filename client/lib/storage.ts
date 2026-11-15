@@ -44,6 +44,20 @@ export const updateStoredTokens = (tokens: AuthTokens): void => {
   if (current) setStoredSession({ ...current, ...tokens });
 };
 
+// Settings > "Use my location" on this device (only the choice, never the coordinates)
+const LOCATION_KEY = "after-use-location";
+
+export const getLocationPreference = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(LOCATION_KEY) === "true";
+};
+
+export const setLocationPreference = (enabled: boolean): void => {
+  if (typeof window === "undefined") return;
+  if (enabled) window.localStorage.setItem(LOCATION_KEY, "true");
+  else window.localStorage.removeItem(LOCATION_KEY);
+};
+
 // Where to go after a Google/Apple sign-in: the ?next= of the login page survives the trip to the
 // provider in sessionStorage (this tab only)
 const OAUTH_NEXT_KEY = "after-oauth-next";

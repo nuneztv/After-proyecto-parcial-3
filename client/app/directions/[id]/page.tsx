@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -54,7 +55,7 @@ export default function DirectionsPage() {
               className="map-sheet"
               style={{ position: "relative", bottom: "auto", left: "auto", right: "auto", marginTop: 12 }}
             >
-              <img src={selectedEvent.imageUrl} alt={selectedEvent.venueName} />
+              <Image src={selectedEvent.imageUrl} alt={selectedEvent.venueName} width={74} height={74} unoptimized />
               <div>
                 <strong>{selectedEvent.venueName}</strong>
                 <p className="muted">{selectedEvent.distanceKm} Km · {walkingMinutes(selectedEvent.distanceKm)} min away</p>

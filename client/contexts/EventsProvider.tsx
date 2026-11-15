@@ -5,8 +5,15 @@ import type { ReactNode } from 'react';
 import { isAxiosError } from 'axios';
 import { useAxios } from './AxiosProvider';
 import { useAuth } from './AuthProvider';
+import { useSettings } from './SettingsProvider';
 import { getErrorMessage } from '@/lib/errors';
-import { matchesDistance, matchesTime, toEventView, toServerQuery } from '@/lib/eventMappers';
+import {
+  matchesDistance,
+  matchesTime,
+  toEventView,
+  toServerQuery,
+  withDistanceFrom,
+} from '@/lib/eventMappers';
 import { subscribeToEventsChannel } from '@/lib/realtime';
 import type { ApiEvent, EventFilters, EventView } from '@/types/models';
 
@@ -61,6 +68,8 @@ const upsert = (list: EventView[], event: EventView): EventView[] =>
 export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
   const { user } = useAuth();
+  // Where distances are measured from: the user's location if they allowed it, else central Cali
+  const { origin } = useSettings();
   // The id, not the object: GET /api/auth/me replaces the user object without changing who it is
   const userId = user?.id;
   const [allEvents, setAllEvents] = useState<EventView[]>([]);
@@ -157,12 +166,27 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     // liveVersion is a trigger only: a Realtime signal re-runs the current query
   }, [axios, userId, serverQueryKey, liveVersion]);
 
+  // Distances follow the current origin (Settings > location), not the one at load time
+  const locatedEvents = useMemo(
+    () => allEvents.map((event) => withDistanceFrom(event, origin)),
+    [allEvents, origin],
+  );
+  const locatedMatches = useMemo(
+    () => serverMatches?.map((event) => withDistanceFrom(event, origin)) ?? null,
+    [serverMatches, origin],
+  );
+  const locatedSelected = useMemo(
+    () => (selectedEvent ? withDistanceFrom(selectedEvent, origin) : null),
+    [selectedEvent, origin],
+  );
+
   const events = useMemo(() => {
-    const base = serverQuery === null ? [] : hasServerQuery ? (serverMatches ?? allEvents) : allEvents;
+    const base =
+      serverQuery === null ? [] : hasServerQuery ? (locatedMatches ?? locatedEvents) : locatedEvents;
     return base.filter(
       (event) => matchesTime(event, filters.time) && matchesDistance(event, filters.maxDistance),
     );
-  }, [serverQuery, hasServerQuery, serverMatches, allEvents, filters.time, filters.maxDistance]);
+  }, [serverQuery, hasServerQuery, locatedMatches, locatedEvents, filters.time, filters.maxDistance]);
 
   const happening = useMemo(() => events.filter((event) => event.section === 'happening'), [events]);
   const tonight = useMemo(() => events.filter((event) => event.section === 'tonight'), [events]);
@@ -263,7 +287,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(
     () => ({
-      allEvents,
+      allEvents: locatedEvents,
       events,
       happening,
       tonight,
@@ -274,13 +298,13 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       loading,
       error,
       reloadEvents,
-      selectedEvent,
+      selectedEvent: locatedSelected,
       loadingEvent,
       eventError,
       loadEventById,
     }),
     [
-      allEvents,
+      locatedEvents,
       events,
       happening,
       tonight,
@@ -291,7 +315,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       loading,
       error,
       reloadEvents,
-      selectedEvent,
+      locatedSelected,
       loadingEvent,
       eventError,
       loadEventById,

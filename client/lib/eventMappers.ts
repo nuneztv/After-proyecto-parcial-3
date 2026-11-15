@@ -2,6 +2,12 @@ import type { ApiEvent, EventFilters, EventSection, EventView } from '@/types/mo
 
 // After is a Cali app: dates are shown in Bogota time whatever the device's time zone
 export const EVENT_TIME_ZONE = 'America/Bogota';
+// Distance from another origin (Settings > location), without re-mapping the whole event
+export const withDistanceFrom = <T extends EventView>(event: T, origin: Coordinates): T => ({
+  ...event,
+  distanceKm: distanceKm(origin, event),
+});
+
 // Bogota has no daylight saving time: local midnight is always 05:00 UTC
 const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;

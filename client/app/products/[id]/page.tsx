@@ -1,16 +1,21 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { IconBack } from "@/components/Icons/Icons";
 import { useProducts } from "@/contexts/ProductsProvider";
+import { usePayments } from "@/contexts/PaymentsProvider";
 import { FALLBACK_EVENT_IMAGE } from "@/lib/eventMappers";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { loadProductById, selectedProduct, loadingProduct, productError } = useProducts();
+  const { getActivePayment, reserveTicket, reservingId, loading: loadingPayments } = usePayments();
+  const ticket = selectedProduct ? getActivePayment(selectedProduct.id) : null;
+  const reserving = selectedProduct !== null && reservingId === selectedProduct.id;
 
   useEffect(() => {
     if (params.id) void loadProductById(params.id);
@@ -31,9 +36,13 @@ export default function ProductDetailPage() {
         {selectedProduct ? (
           <>
             <div className="hero-photo">
-              <img
+              <Image
                 src={selectedProduct.imageUrl || selectedProduct.event.imageUrl || FALLBACK_EVENT_IMAGE}
                 alt={selectedProduct.name}
+                width={400}
+                height={250}
+                priority
+                unoptimized
               />
               <div className="float-actions">
                 <button className="round" onClick={() => router.back()} aria-label="Back">
@@ -51,6 +60,22 @@ export default function ProductDetailPage() {
                 {selectedProduct.price} {selectedProduct.currency}
               </strong>
             </p>
+            {ticket ? (
+              <p className="status-box" role="status">
+                {ticket.status === "paid"
+                  ? "You have this ticket (paid)."
+                  : "Ticket reserved. Payment is pending: no charge has been made."}
+              </p>
+            ) : (
+              <button
+                className="btn"
+                type="button"
+                disabled={reserving || loadingPayments}
+                onClick={() => void reserveTicket(selectedProduct.id)}
+              >
+                {reserving ? "Reserving..." : "Get Ticket"}
+              </button>
+            )}
           </>
         ) : null}
       </section>

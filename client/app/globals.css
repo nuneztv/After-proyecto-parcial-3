@@ -1094,3 +1094,52 @@ button {
   background: #fff;
   color: #6d5b7c;
 }
+
+/* Profile panels (Badges, Notifications, Settings, Help): open below their menu item */
+.profile-panel {
+  display: grid;
+  gap: 10px;
+  margin: -4px 0 12px;
+}
+
+.panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.panel-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  text-align: left;
+}
+
+button.panel-item {
+  cursor: pointer;
+}
+
+.panel-item.locked {
+  opacity: 0.55;
+}
+
+.panel-faq summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panel-faq p {
+  margin: 6px 0 0;
+  font-size: 14px;
+}

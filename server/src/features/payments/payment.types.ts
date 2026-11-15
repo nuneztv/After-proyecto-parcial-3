@@ -21,3 +21,9 @@ export interface Payment {
   createdAt: string;
   product: PaymentProduct;
 }
+
+// POST /api/payments: created is false when the user already had this ticket reserved or paid
+export interface ReservationResult {
+  payment: Payment;
+  created: boolean;
+}
