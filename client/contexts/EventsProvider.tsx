@@ -2,10 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { isAxiosError } from 'axios';
 import { useAxios } from './AxiosProvider';
 import { useAuth } from './AuthProvider';
 import { getErrorMessage } from '@/lib/errors';
 import { matchesDistance, matchesTime, toEventView, toServerQuery } from '@/lib/eventMappers';
+import { subscribeToEventsChannel } from '@/lib/realtime';
 import type { ApiEvent, EventFilters, EventView } from '@/types/models';
 
 export const DEFAULT_FILTERS: EventFilters = {
@@ -42,11 +44,19 @@ interface EventsContextType {
 
 const EventsContext = createContext<EventsContextType | null>(null);
 
-// Replaces the event with the same id, or appends it: safe to apply twice
+const remove = (list: EventView[], id: string): EventView[] => list.filter((item) => item.id !== id);
+
+// Same order as GET /api/events (starts_at, then id), so a new event lands where a reload
+// would put it
+const byStart = (a: EventView, b: EventView): number =>
+  a.startsAt === b.startsAt ? a.id.localeCompare(b.id) : a.startsAt.localeCompare(b.startsAt);
+
+// Replaces the event with the same id, or inserts it: safe to apply twice (the HTTP response
+// and a Realtime re-fetch can deliver the same event)
 const upsert = (list: EventView[], event: EventView): EventView[] =>
   list.some((item) => item.id === event.id)
     ? list.map((item) => (item.id === event.id ? event : item))
-    : [...list, event];
+    : [...list, event].sort(byStart);
 
 export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
@@ -68,24 +78,36 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const listRequest = useRef(0);
   const detailRequest = useRef('');
   const allEventsRef = useRef<EventView[]>([]);
+  // Bumped by Realtime: re-runs the server-side filter so a changed event can enter or leave it
+  const [liveVersion, setLiveVersion] = useState(0);
+  // Query of the last filter request: a re-run for the same query refreshes silently
+  const lastQueryKey = useRef('');
+  // Latest Realtime re-fetch per event id: an older response for the same id is ignored
+  const liveRequests = useRef(new Map<string, number>());
 
   useEffect(() => {
     allEventsRef.current = allEvents;
   }, [allEvents]);
 
-  const reloadEvents = useCallback(async () => {
-    setLoadingList(true);
-    setError('');
+  // silent: background refresh (Realtime resync) that must not flash the loading state
+  const fetchAllEvents = useCallback(
+    async (silent: boolean) => {
+      if (!silent) setLoadingList(true);
+      setError('');
 
-    try {
-      const { data } = await axios.get<ApiEvent[]>('/api/events');
-      setAllEvents(data.map((event) => toEventView(event)));
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoadingList(false);
-    }
-  }, [axios]);
+      try {
+        const { data } = await axios.get<ApiEvent[]>('/api/events');
+        setAllEvents(data.map((event) => toEventView(event)));
+      } catch (err) {
+        setError(getErrorMessage(err));
+      } finally {
+        if (!silent) setLoadingList(false);
+      }
+    },
+    [axios],
+  );
+
+  const reloadEvents = useCallback(() => fetchAllEvents(false), [fetchAllEvents]);
 
   useEffect(() => {
     if (!userId) return;
@@ -104,6 +126,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
 
     const requestId = ++listRequest.current;
     const query = JSON.parse(serverQueryKey) as ReturnType<typeof toServerQuery>;
+    const silent = lastQueryKey.current === serverQueryKey;
+    lastQueryKey.current = serverQueryKey;
 
     if (query === null || Object.keys(query).length === 0) {
       // No request: a pending one (if any) is now outdated
@@ -113,7 +137,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const timer = window.setTimeout(async () => {
-      setFiltering(true);
+      if (!silent) setFiltering(true);
       setError('');
 
       try {
@@ -126,10 +150,11 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       } finally {
         if (requestId === listRequest.current) setFiltering(false);
       }
-    }, query.search ? SEARCH_DEBOUNCE_MS : 0);
+    }, query.search && !silent ? SEARCH_DEBOUNCE_MS : 0);
 
     return () => window.clearTimeout(timer);
-  }, [axios, userId, serverQueryKey]);
+    // liveVersion is a trigger only: a Realtime signal re-runs the current query
+  }, [axios, userId, serverQueryKey, liveVersion]);
 
   const events = useMemo(
     () =>
@@ -180,6 +205,58 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     },
     [axios],
   );
+
+  // A Realtime signal only says "event <id> changed": the data shown always comes from the API
+  const refreshEvent = useCallback(
+    async (id: string) => {
+      const requestId = (liveRequests.current.get(id) ?? 0) + 1;
+      liveRequests.current.set(id, requestId);
+      const isLatest = () => liveRequests.current.get(id) === requestId;
+
+      try {
+        const { data } = await axios.get<ApiEvent>(`/api/events/${encodeURIComponent(id)}`);
+        if (!isLatest()) return;
+
+        const event = toEventView(data);
+        setAllEvents((prev) => upsert(prev, event));
+        if (detailRequest.current === id) setSelectedEvent(event);
+      } catch (err) {
+        if (!isLatest()) return;
+
+        if (isAxiosError(err) && err.response?.status === 404) {
+          // The event no longer exists: drop it from every list and from the open detail
+          setAllEvents((prev) => remove(prev, id));
+          setServerMatches((prev) => (prev ? remove(prev, id) : prev));
+          if (detailRequest.current === id) {
+            setSelectedEvent(null);
+            setEventError(getErrorMessage(err));
+          }
+          return;
+        }
+        // The screen keeps the last known data; the next signal or resync tries again
+        console.error(`Realtime refresh of event ${id} failed`, err);
+      }
+    },
+    [axios],
+  );
+
+  // One subscription per signed-in user (the shared channel in lib/realtime.ts deduplicates
+  // Strict Mode and re-created providers); removed when the provider unmounts or the user logs out
+  useEffect(() => {
+    if (!userId) return;
+
+    return subscribeToEventsChannel({
+      onEventChanged: ({ id }) => {
+        void refreshEvent(id);
+        setLiveVersion((version) => version + 1);
+      },
+      onResync: () => {
+        void fetchAllEvents(true);
+        if (detailRequest.current) void refreshEvent(detailRequest.current);
+        setLiveVersion((version) => version + 1);
+      },
+    });
+  }, [userId, refreshEvent, fetchAllEvents]);
 
   const loading = loadingList || filtering;
 
