@@ -1,4 +1,4 @@
-import { NewEventForm } from '@/components/admin/NewEventForm/NewEventForm';
+import { EventForm } from '@/components/admin/EventForm/EventForm';
 import { PageHeader } from '@/components/admin/PageHeader/PageHeader';
 import { PrivateRoute } from '@/components/admin/PrivateRoute/PrivateRoute';
 
@@ -16,7 +16,7 @@ const NewEventPage = () => {
           }
           backHref="/admin/events"
         />
-        <NewEventForm />
+        <EventForm mode="create" />
       </div>
     </PrivateRoute>
   );

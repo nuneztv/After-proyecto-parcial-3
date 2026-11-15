@@ -10,11 +10,15 @@ export interface AfterEvent {
   endTime: string;
   location: string;
   address: string;
-  // ISO timestamp from the API; the display fields above are derived from it
+  // ISO timestamps from the API; the display fields above are derived from them
   startsAt: string;
+  endsAt: string | null;
   latitude: number;
   longitude: number;
+  // Display source: the stored image or the brand fallback
   image: string;
+  // Stored value (null when the event has no image); the edit form starts from it
+  imageUrl: string | null;
   status: EventStatus;
   attendees: number;
   capacity: number;
@@ -34,6 +38,12 @@ export interface Activity {
   time: string;
   message: string;
   createdAt: string;
+  // Present when the row came from a read endpoint; status already mapped for the admin
+  event?: {
+    id: string;
+    name: string;
+    status: EventStatus;
+  };
 }
 
 // Stored status as the API returns it (shared with the user app, unmapped)
@@ -61,12 +71,21 @@ export interface ApiEvent {
   createdAt: string;
 }
 
-// Mirrors the server's EventActivity (GET /api/events/activity, GET /api/events/:id/activity)
+// Event a feed row belongs to, nested by the server with json_build_object
+export interface ApiActivityEvent {
+  id: string;
+  title: string;
+  status: ApiEventStatus;
+}
+
+// Mirrors the server's EventActivity. The read endpoints (GET /api/events/activity,
+// GET /api/events/:id/activity) add `event`; the PATCH occupancy response does not
 export interface ApiActivity {
   id: string;
   eventId: string;
   message: string;
   createdAt: string;
+  event?: ApiActivityEvent;
 }
 
 // View model used by the admin screens (header, avatar, profile page)
@@ -129,7 +148,7 @@ export interface EventLocation {
   longitude: number;
 }
 
-// Values of the "new event" form, kept as typed by the admin (strings) until submit
+// Values of the event form (create or edit), kept as typed by the admin (strings) until submit
 export interface EventDraft {
   title: string;
   description: string;
@@ -138,6 +157,8 @@ export interface EventDraft {
   date: string;
   // 'HH:mm' (input type="time")
   time: string;
+  // 'YYYY-MM-DD' of the end, or '' for "same night" (the next day when endTime <= time)
+  endDate: string;
   // 'HH:mm' or '' when the event has no end time
   endTime: string;
   capacity: string;
@@ -166,6 +187,16 @@ export interface CreateEventInput {
   // Must be an image this admin uploaded (POST /api/uploads/images); null means no image
   imageUrl?: string | null;
 }
+
+// Body of PATCH /api/events/:id. The admin form always sends every editable field;
+// address, categories, status and occupied are not editable here (the API rejects them)
+export interface UpdateEventInput extends Omit<CreateEventInput, 'imageUrl'> {
+  // The unchanged current URL is always accepted; a new one must be an image this admin uploaded
+  imageUrl: string | null;
+}
+
+// One draft per form: 'new' for the create form, `edit:<event id>` for each edit form
+export type DraftKey = 'new' | `edit:${string}`;
 
 // Response of POST /api/uploads/images
 export interface ApiUploadedImage {

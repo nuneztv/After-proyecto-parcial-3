@@ -10,6 +10,7 @@ import {
   checkInActivity,
   createEventBody,
   createdEvent,
+  editedEvent,
   EVENT_ID,
   MISSING_EVENT_ID,
   rooftopActivity,
@@ -26,6 +27,7 @@ const getEventActivityService = asyncMock();
 const getRecentActivityService = asyncMock();
 const createEventService = asyncMock();
 const updateOccupancyService = asyncMock();
+const updateEventService = asyncMock();
 
 // Fixed config: imageUrl ownership is checked against SUPABASE_URL, and the real one must not leak in
 mock.module('../../src/config', { namedExports: testConfig });
@@ -44,6 +46,7 @@ mock.module('../../src/features/events/event.service', {
     getRecentActivityService,
     createEventService,
     updateOccupancyService,
+    updateEventService,
   },
 });
 
@@ -69,6 +72,7 @@ beforeEach(() => {
     getRecentActivityService,
     createEventService,
     updateOccupancyService,
+    updateEventService,
   ].forEach((fn) => fn.mock.resetCalls());
 });
 
@@ -152,6 +156,45 @@ test('GET /api/events/activity returns the recent activity for an admin', async 
   getRecentActivityService.mock.mockImplementation(async () => [rooftopActivity]);
 
   const res = await request(app).get('/api/events/activity').set('Authorization', 'Bearer valid');
+
+  assert.deepEqual(res.body, [rooftopActivity]);
+});
+
+test('GET /api/events/activity nests the event of each row as { id, title, status }', async () => {
+  asRole('admin');
+  getRecentActivityService.mock.mockImplementation(async () => [rooftopActivity]);
+
+  const res = await request(app).get('/api/events/activity').set('Authorization', 'Bearer valid');
+
+  assert.deepEqual(res.body[0].event, {
+    id: EVENT_ID,
+    title: 'Rooftop Sessions',
+    status: 'live',
+  });
+});
+
+test('GET /api/events/activity keeps the existing fields next to the nested event', async () => {
+  asRole('admin');
+  getRecentActivityService.mock.mockImplementation(async () => [rooftopActivity]);
+
+  const res = await request(app).get('/api/events/activity').set('Authorization', 'Bearer valid');
+
+  assert.deepEqual(Object.keys(res.body[0]).sort(), [
+    'createdAt',
+    'event',
+    'eventId',
+    'id',
+    'message',
+  ]);
+});
+
+test('GET /api/events/:id/activity returns the rows with their nested event', async () => {
+  asRole('admin');
+  getEventActivityService.mock.mockImplementation(async () => [rooftopActivity]);
+
+  const res = await request(app)
+    .get(`/api/events/${EVENT_ID}/activity`)
+    .set('Authorization', 'Bearer valid');
 
   assert.deepEqual(res.body, [rooftopActivity]);
 });
@@ -520,3 +563,147 @@ for (const [label, imageUrl] of [
     assert.equal(imageUrlPassed(), null);
   });
 }
+
+const patchEvent = (id: string, body: Record<string, unknown>) =>
+  request(app).patch(`/api/events/${id}`).set('Authorization', 'Bearer valid').send(body);
+
+test('PATCH /api/events/:id answers 401 without a token', async () => {
+  const res = await request(app).patch(`/api/events/${EVENT_ID}`).send({ title: 'Rooftop' });
+
+  assert.equal(res.status, 401);
+});
+
+test('PATCH /api/events/:id answers 403 for a client token', async () => {
+  asRole('client');
+
+  const res = await patchEvent(EVENT_ID, { title: 'Rooftop' });
+
+  assert.equal(res.status, 403);
+});
+
+test('PATCH /api/events/:id does not call the service for a client token', async () => {
+  asRole('client');
+
+  await patchEvent(EVENT_ID, { title: 'Rooftop' });
+
+  assert.equal(updateEventService.mock.callCount(), 0);
+});
+
+test('PATCH /api/events/:id answers 400 "Invalid event id" for a non-UUID id', async () => {
+  asRole('admin');
+
+  const res = await patchEvent('not-a-uuid', { title: 'Rooftop' });
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Invalid event id']);
+});
+
+test('PATCH /api/events/:id answers 400 for a field that cannot be updated', async () => {
+  asRole('admin');
+
+  const res = await patchEvent(EVENT_ID, { title: 'Rooftop', status: 'live' });
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Field "status" cannot be updated']);
+});
+
+test('PATCH /api/events/:id answers 400 "Nothing to update" for an empty body', async () => {
+  asRole('admin');
+
+  const res = await patchEvent(EVENT_ID, {});
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Nothing to update']);
+});
+
+test('PATCH /api/events/:id does not call the service for an invalid body', async () => {
+  asRole('admin');
+
+  await patchEvent(EVENT_ID, { capacity: 0 });
+
+  assert.equal(updateEventService.mock.callCount(), 0);
+});
+
+test('PATCH /api/events/:id answers 404 when the event does not exist', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => {
+    throw Boom.notFound('Event not found');
+  });
+
+  const res = await patchEvent(MISSING_EVENT_ID, { title: 'Rooftop' });
+
+  assert.deepEqual([res.status, res.body.message], [404, 'Event not found']);
+});
+
+test('PATCH /api/events/:id answers 409 with the occupancy message', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => {
+    throw Boom.conflict('Capacity cannot be lower than the current occupancy (342 people)');
+  });
+
+  const res = await patchEvent(EVENT_ID, { capacity: 100 });
+
+  assert.deepEqual(
+    [res.status, res.body.message],
+    [409, 'Capacity cannot be lower than the current occupancy (342 people)'],
+  );
+});
+
+test('PATCH /api/events/:id answers 200 with the updated event for an admin', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => editedEvent);
+
+  const res = await patchEvent(EVENT_ID, { title: 'Rooftop Sessions XL', capacity: 450 });
+
+  assert.deepEqual([res.status, res.body], [200, editedEvent]);
+});
+
+test('PATCH /api/events/:id passes the id, the parsed DTO and the token user id to the service', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => editedEvent);
+
+  await patchEvent(EVENT_ID, { title: '  Rooftop Sessions XL ', capacity: 450, imageUrl: null });
+
+  assert.deepEqual(updateEventService.mock.calls[0].arguments, [
+    EVENT_ID,
+    { title: 'Rooftop Sessions XL', capacity: 450, imageUrl: null },
+    'user-1',
+  ]);
+});
+
+test('PATCH /api/events/:id leaves the image ownership check to the service', async () => {
+  // Keeping a stored image from another admin must reach the service, which compares it under lock
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => editedEvent);
+
+  const res = await patchEvent(EVENT_ID, { imageUrl: ownImageUrl('user-2') });
+
+  assert.equal(res.status, 200);
+});
+
+test('PATCH /api/events/:id answers 200 for a blank address', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => editedEvent);
+
+  const res = await patchEvent(EVENT_ID, { address: '   ' });
+
+  assert.equal(res.status, 200);
+});
+
+test('PATCH /api/events/:id passes address: null to the service for a blank address', async () => {
+  asRole('admin');
+  updateEventService.mock.mockImplementation(async () => editedEvent);
+
+  await patchEvent(EVENT_ID, { address: '' });
+
+  assert.deepEqual(updateEventService.mock.calls[0].arguments, [
+    EVENT_ID,
+    { address: null },
+    'user-1',
+  ]);
+});
+
+test('PATCH /api/events/:id answers 400 "Address is invalid" for address: null', async () => {
+  asRole('admin');
+
+  const res = await patchEvent(EVENT_ID, { address: null });
+
+  assert.deepEqual([res.status, res.body.message], [400, 'Address is invalid']);
+});

@@ -27,6 +27,7 @@ const ProfilePage = () => {
             <>
               {profile.avatar ? (
                 // Supabase Storage URLs are not in next.config images, so a plain img is used
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={profile.avatar} alt={profile.name} className="profile-header__photo" />
               ) : (
                 <div className="profile-header__photo profile-header__initials" aria-hidden="true">

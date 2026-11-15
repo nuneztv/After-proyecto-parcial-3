@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
-import { getUserFromRequest } from '../../middlewares/authMiddleware';
-import { getMeService, loginService, refreshService, registerService } from './auth.service';
+import { getBearerToken, getUserFromRequest } from '../../middlewares/authMiddleware';
+import {
+  getMeService,
+  loginService,
+  logoutService,
+  refreshService,
+  registerService,
+} from './auth.service';
 import { parseLoginBody, parseRefreshBody, parseRegisterBody } from './auth.validation';
 
 export const registerController = async (req: Request, res: Response) => {
@@ -27,4 +33,11 @@ export const getMeController = async (req: Request, res: Response) => {
   const user = getUserFromRequest(req);
 
   res.status(200).json(await getMeService(user.id));
+};
+
+// authMiddleware already validated the token; the raw value identifies the session to revoke
+export const logoutController = async (req: Request, res: Response) => {
+  await logoutService(getBearerToken(req));
+
+  res.status(204).end();
 };

@@ -8,6 +8,7 @@ import {
   getEventsController,
   getEventStatsController,
   getRecentActivityController,
+  updateEventController,
   updateOccupancyController,
 } from './event.controller';
 
@@ -39,6 +40,12 @@ router.post(
   asyncHandler(authMiddleware),
   requireRole('admin'),
   asyncHandler(createEventController),
+);
+router.patch(
+  '/:id',
+  asyncHandler(authMiddleware),
+  requireRole('admin'),
+  asyncHandler(updateEventController),
 );
 router.patch(
   '/:id/occupancy',

@@ -536,6 +536,26 @@
   font-weight: 700;
 }
 
+/* Overview feed: event name (link to its Live Control) + status, above the row */
+.admin-app .activity__event {
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* globals.css (user app) positions every .badge absolutely in a card corner: keep it inline here */
+.admin-app .activity__event .badge {
+  position: static;
+}
+
+.admin-app .activity__event-link {
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .admin-app .pills {
   margin: 14px 0 22px;
   display: flex;
@@ -740,6 +760,13 @@
   font-weight: 800;
 }
 
+/* globals.css (user app) positions every .badge absolutely in a card corner: keep it in the row,
+   next to the event name (same fix as .activity__event .badge) */
+.admin-app .live-name-row .badge {
+  position: static;
+  flex: none;
+}
+
 .admin-app .people-card {
   position: relative;
   margin-top: 24px;
@@ -902,6 +929,11 @@
   font-weight: 800;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
   cursor: pointer;
+}
+
+.admin-app .logout:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .admin-app .map {
@@ -1109,6 +1141,12 @@
   font-weight: 700;
 }
 
+.admin-app .form-hint {
+  margin: -6px 0 0;
+  color: var(--grey);
+  font-size: 12px;
+}
+
 .admin-app .form-location {
   display: flex;
   align-items: center;
@@ -1124,6 +1162,14 @@
 }
 
 /* Location picker (Leaflet) on /admin/map */
+/* globals.css (user app) draws a decorative circle in .phone::before with right: -70px, which
+   leaves .phone (overflow: hidden) 70px of horizontal scroll. Opening the Leaflet map scrolls it,
+   shifting the whole admin screen left. `clip` looks the same but cannot be scrolled; scoped with
+   :has() so it only applies while the admin app is mounted (the user app's frame is untouched) */
+.phone:has(> .admin-app) {
+  overflow: clip;
+}
+
 .admin-app .location-picker {
   position: absolute;
   inset: 0;

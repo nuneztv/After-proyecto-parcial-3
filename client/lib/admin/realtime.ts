@@ -26,7 +26,14 @@ export interface EventsChannelHandlers {
   onEventChanged?: (signal: EventSignal) => void;
   // An activity row was written for an event: re-fetch the feeds that show it
   onActivityCreated?: (signal: ActivitySignal) => void;
+  // The channel came back after a connection failure. Broadcast does not replay messages, so
+  // signals sent while it was down are lost: re-read everything currently shown from the API
+  onResync?: () => void;
 }
+
+// A dropped socket (network change, laptop sleep, dev-server reload) is normal: realtime-js
+// reconnects and rejoins on its own. Only a channel that stays down this long is an error
+const RECOVERY_GRACE_MS = 30_000;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,12 +41,12 @@ const isUuid = (value: unknown): value is string =>
   typeof value === 'string' && UUID_PATTERN.test(value);
 
 // Only the ids are kept; anything else in the payload is ignored
-const toEventSignal = (payload: unknown): EventSignal | null => {
+export const toEventSignal = (payload: unknown): EventSignal | null => {
   const id = (payload as { id?: unknown } | null)?.id;
   return isUuid(id) ? { id } : null;
 };
 
-const toActivitySignal = (payload: unknown): ActivitySignal | null => {
+export const toActivitySignal = (payload: unknown): ActivitySignal | null => {
   const { id, eventId } = (payload ?? {}) as { id?: unknown; eventId?: unknown };
   return isUuid(id) && isUuid(eventId) ? { id, eventId } : null;
 };
@@ -80,11 +87,56 @@ const openChannel = (): void => {
       const signal = toActivitySignal(payload);
       if (signal) emit('onActivityCreated', signal);
     })
-    .subscribe((status, err) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        console.error(`Realtime channel ${EVENTS_CHANNEL}: ${status}`, err);
-      }
-    });
+    .subscribe((status, err) => handleStatus(status, err));
+};
+
+// Connection state of the shared channel: set on the first failure, cleared when it rejoins
+let failedSince: number | null = null;
+let failedAttempts = 0;
+let stillDownTimer: ReturnType<typeof setTimeout> | null = null;
+
+const clearStillDownTimer = (): void => {
+  if (stillDownTimer) clearTimeout(stillDownTimer);
+  stillDownTimer = null;
+};
+
+const handleStatus = (status: string, err?: Error): void => {
+  if (status === 'SUBSCRIBED') {
+    if (failedSince === null) return;
+
+    const downForMs = Date.now() - failedSince;
+    const attempts = failedAttempts;
+    failedSince = null;
+    failedAttempts = 0;
+    clearStillDownTimer();
+    console.info(
+      `Realtime channel ${EVENTS_CHANNEL}: reconnected after ${downForMs} ms (${attempts} failed attempts), resyncing`,
+    );
+    emitResync();
+    return;
+  }
+
+  if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+    failedAttempts += 1;
+    // realtime-js retries every few seconds and reports each failed attempt: warn once per
+    // outage (with the first cause); the recovery or the 30 s error below report the totals
+    if (failedSince !== null) return;
+
+    failedSince = Date.now();
+    console.warn(`Realtime channel ${EVENTS_CHANNEL}: ${status}, reconnecting...`, err);
+    stillDownTimer = setTimeout(() => {
+      stillDownTimer = null;
+      if (failedSince === null) return;
+      console.error(
+        `Realtime channel ${EVENTS_CHANNEL}: still disconnected after ${RECOVERY_GRACE_MS / 1000} s (${failedAttempts} failed attempts); live updates are paused until it reconnects. First cause:`,
+        err,
+      );
+    }, RECOVERY_GRACE_MS);
+  }
+};
+
+const emitResync = (): void => {
+  listeners.forEach((handlers) => handlers.onResync?.());
 };
 
 const closeChannel = (): void => {
@@ -94,6 +146,10 @@ const closeChannel = (): void => {
 
   const current = channel;
   channel = null;
+  // Closing on purpose (logout, unmount) is not a failure to report or recover from
+  failedSince = null;
+  failedAttempts = 0;
+  clearStillDownTimer();
   removing = client
     .removeChannel(current)
     .catch((error: unknown) => {

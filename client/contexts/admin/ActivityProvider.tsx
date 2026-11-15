@@ -48,7 +48,8 @@ export const ActivityProvider = ({ children }: { children: ReactNode }) => {
   const isAdmin = user?.role === 'admin';
 
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Only an administrator's session loads anything
+  const [loading, setLoading] = useState(isAdmin);
   const [error, setError] = useState<string | null>(null);
 
   const [eventActivities, setEventActivities] = useState<Activity[]>([]);
@@ -121,21 +122,12 @@ export const ActivityProvider = ({ children }: { children: ReactNode }) => {
   );
 
   useEffect(() => {
-    if (!isAdmin) {
-      // Logged out or not an admin (e.g. the login page): never fetch, drop previous data
-      listRequest.current++;
-      eventRequest.current++;
-      session.current++;
-      loadedEventId.current = null;
-      setActivities([]);
-      setError(null);
-      setLoading(false);
-      setEventActivities([]);
-      setEventActivityError(null);
-      setEventActivityLoading(false);
-      return;
-    }
-
+    // Logged out or not an admin (e.g. the login page): never fetch. AdminState re-creates this
+    // provider per user, so there is no previous session's data to drop here
+    if (!isAdmin) return;
+    // The fetch is the external system this effect syncs with: state only changes once the API
+    // answers (the loading flag already starts true, so the first update is a no-op)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, [isAdmin, user?.id, reload]);
 
@@ -208,6 +200,13 @@ export const ActivityProvider = ({ children }: { children: ReactNode }) => {
         if (!refreshTimer.current) {
           refreshTimer.current = setTimeout(() => void refreshFeeds(), REFRESH_DEBOUNCE_MS);
         }
+      },
+      // After a Realtime outage: re-read the recent feed and, if one is open, that event's feed
+      // (rows are merged by id, so nothing already shown is dropped)
+      onResync: () => {
+        if (loadedEventId.current) pendingEventIds.current.add(loadedEventId.current);
+        if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        void refreshFeeds();
       },
     });
 

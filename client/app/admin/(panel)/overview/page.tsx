@@ -63,7 +63,7 @@ const OverviewPage = () => {
       {!activityLoading && !activityError && recentActivities.length === 0 && (
         <EmptyState title="No activity yet" />
       )}
-      {recentActivities.length > 0 && <ActivityList activities={recentActivities} />}
+      {recentActivities.length > 0 && <ActivityList activities={recentActivities} showEvent />}
 
       <CreateEventButton />
     </>

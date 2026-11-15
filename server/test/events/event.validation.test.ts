@@ -6,6 +6,7 @@ import {
   parseEventFilters,
   parseEventId,
   parseOccupancyDelta,
+  parseUpdateEventBody,
 } from '../../src/features/events/event.validation';
 import { statusOf } from '../helpers/supabaseMocks';
 import { createEventBody, EVENT_ID } from '../helpers/eventFixtures';
@@ -346,4 +347,182 @@ test('parseCreateEventBody throws 400 "Invalid image URL" for an imageUrl over 5
     () => parseCreateEventBody({ ...minimalBody, imageUrl: `https://x.co/${'a'.repeat(490)}` }),
     'Invalid image URL',
   );
+});
+
+test('parseUpdateEventBody returns only the fields that were sent', () => {
+  assert.deepEqual(parseUpdateEventBody({ title: 'Rooftop Sessions XL', capacity: 450 }), {
+    title: 'Rooftop Sessions XL',
+    capacity: 450,
+  });
+});
+
+test('parseUpdateEventBody parses every updatable field with the create rules', () => {
+  assert.deepEqual(
+    parseUpdateEventBody({
+      title: '  Salsa Night ',
+      description: ' Live salsa band. ',
+      venueName: 'La Topa Tolondra',
+      address: 'Calle 5 #13-27, Cali',
+      startsAt: '2026-11-20T21:00:00-05:00',
+      endsAt: '2026-11-21T03:00:00-05:00',
+      latitude: 3.4495,
+      longitude: -76.5385,
+      capacity: 250,
+      imageUrl: ' https://x.co/a.png ',
+    }),
+    {
+      title: 'Salsa Night',
+      description: 'Live salsa band.',
+      venueName: 'La Topa Tolondra',
+      address: 'Calle 5 #13-27, Cali',
+      startsAt: '2026-11-20T21:00:00-05:00',
+      endsAt: '2026-11-21T03:00:00-05:00',
+      latitude: 3.4495,
+      longitude: -76.5385,
+      capacity: 250,
+      imageUrl: 'https://x.co/a.png',
+    },
+  );
+});
+
+for (const key of ['status', 'occupied', 'categories', 'id', 'createdBy']) {
+  test(`parseUpdateEventBody throws 400 'Field "${key}" cannot be updated' for ${key}`, () => {
+    throwsBadRequest(
+      () => parseUpdateEventBody({ title: 'Rooftop', [key]: 'x' }),
+      `Field "${key}" cannot be updated`,
+    );
+  });
+}
+
+test('parseUpdateEventBody reports an unknown key before validating the allowed fields', () => {
+  throwsBadRequest(
+    () => parseUpdateEventBody({ capacity: 0, status: 'live' }),
+    'Field "status" cannot be updated',
+  );
+});
+
+for (const body of [null, 'title', [{ title: 'Rooftop' }], 42]) {
+  test(`parseUpdateEventBody throws "Invalid body" for ${JSON.stringify(body)}`, () => {
+    throwsBadRequest(() => parseUpdateEventBody(body), 'Invalid body');
+  });
+}
+
+for (const body of [{}, { title: undefined }]) {
+  test(`parseUpdateEventBody throws "Nothing to update" for ${JSON.stringify(body)}`, () => {
+    throwsBadRequest(() => parseUpdateEventBody(body), 'Nothing to update');
+  });
+}
+
+test('parseUpdateEventBody accepts endsAt: null as the only field (clears the end)', () => {
+  assert.deepEqual(parseUpdateEventBody({ endsAt: null }), { endsAt: null });
+});
+
+test('parseUpdateEventBody accepts imageUrl: null as the only field (removes the image)', () => {
+  assert.deepEqual(parseUpdateEventBody({ imageUrl: null }), { imageUrl: null });
+});
+
+test('parseUpdateEventBody turns a blank imageUrl into null', () => {
+  assert.deepEqual(parseUpdateEventBody({ imageUrl: '   ' }), { imageUrl: null });
+});
+
+for (const [key, message] of [
+  ['title', 'Title is required'],
+  ['description', 'Description is invalid'],
+  ['venueName', 'Venue is required'],
+  ['address', 'Address is invalid'],
+  ['startsAt', 'Start date is invalid'],
+  ['latitude', 'Latitude is invalid'],
+  ['longitude', 'Longitude is invalid'],
+  ['capacity', 'Capacity must be an integer between 1 and 100000'],
+] as const) {
+  test(`parseUpdateEventBody throws "${message}" for ${key}: null`, () => {
+    throwsBadRequest(() => parseUpdateEventBody({ [key]: null }), message);
+  });
+}
+
+for (const [body, message] of [
+  [{ title: '   ' }, 'Title is required'],
+  [{ title: 'a'.repeat(81) }, 'Title must be at most 80 characters'],
+  [{ description: 42 }, 'Description is invalid'],
+  [{ description: 'a'.repeat(501) }, 'Description must be at most 500 characters'],
+  [{ venueName: '' }, 'Venue is required'],
+  [{ venueName: 'a'.repeat(81) }, 'Venue must be at most 80 characters'],
+  [{ address: 'a'.repeat(161) }, 'Address must be at most 160 characters'],
+  [{ startsAt: '2026-11-20T21:00:00' }, 'Start date is invalid'],
+  [{ startsAt: '2026-02-30T21:00:00Z' }, 'Start date is invalid'],
+  [{ endsAt: '2026-11-21 03:00' }, 'End date is invalid'],
+  [{ latitude: 91 }, 'Latitude is invalid'],
+  [{ longitude: '-76.5' }, 'Longitude is invalid'],
+  [{ capacity: 1.5 }, 'Capacity must be an integer between 1 and 100000'],
+  [{ capacity: 100001 }, 'Capacity must be an integer between 1 and 100000'],
+  [{ imageUrl: 42 }, 'Invalid image URL'],
+  [{ imageUrl: `https://x.co/${'a'.repeat(490)}` }, 'Invalid image URL'],
+] as const) {
+  test(`parseUpdateEventBody throws "${message}" for ${JSON.stringify(body).slice(0, 60)}`, () => {
+    throwsBadRequest(() => parseUpdateEventBody(body), message);
+  });
+}
+
+test('parseUpdateEventBody throws "End must be after start" when both dates are sent and end <= start', () => {
+  throwsBadRequest(
+    () =>
+      parseUpdateEventBody({
+        startsAt: '2026-11-20T21:00:00-05:00',
+        endsAt: '2026-11-20T21:00:00-05:00',
+      }),
+    'End must be after start',
+  );
+});
+
+test('parseUpdateEventBody does not compare dates when only endsAt is sent', () => {
+  assert.deepEqual(parseUpdateEventBody({ endsAt: '2020-01-01T00:00:00Z' }), {
+    endsAt: '2020-01-01T00:00:00Z',
+  });
+});
+
+test('parseUpdateEventBody accepts startsAt with endsAt: null', () => {
+  assert.deepEqual(parseUpdateEventBody({ startsAt: '2026-11-20T21:00:00Z', endsAt: null }), {
+    startsAt: '2026-11-20T21:00:00Z',
+    endsAt: null,
+  });
+});
+
+test('parseUpdateEventBody turns a blank address without a venue into null (reset to the stored venue)', () => {
+  assert.deepEqual(parseUpdateEventBody({ address: '   ' }), { address: null });
+});
+
+test('parseUpdateEventBody turns an empty address without a venue into null', () => {
+  assert.deepEqual(parseUpdateEventBody({ address: '' }), { address: null });
+});
+
+test('parseUpdateEventBody uses the venue sent in the same body for a blank address', () => {
+  assert.deepEqual(parseUpdateEventBody({ address: '  ', venueName: 'Zaperoco' }), {
+    venueName: 'Zaperoco',
+    address: 'Zaperoco',
+  });
+});
+
+test('parseUpdateEventBody keeps a non-blank address trimmed when no venue is sent', () => {
+  assert.deepEqual(parseUpdateEventBody({ address: '  Calle 5 #13-27  ' }), {
+    address: 'Calle 5 #13-27',
+  });
+});
+
+test('parseUpdateEventBody throws "Address is invalid" for a numeric address', () => {
+  throwsBadRequest(() => parseUpdateEventBody({ address: 42 }), 'Address is invalid');
+});
+
+test('parseUpdateEventBody throws "Address is invalid" for an array address', () => {
+  throwsBadRequest(() => parseUpdateEventBody({ address: ['Calle 5'] }), 'Address is invalid');
+});
+
+test('parseUpdateEventBody falls back to the venue for a blank address sent with a venue', () => {
+  assert.deepEqual(parseUpdateEventBody({ venueName: 'La Topa Tolondra', address: '' }), {
+    venueName: 'La Topa Tolondra',
+    address: 'La Topa Tolondra',
+  });
+});
+
+test('parseUpdateEventBody keeps an empty description (it is optional)', () => {
+  assert.deepEqual(parseUpdateEventBody({ description: '  ' }), { description: '' });
 });

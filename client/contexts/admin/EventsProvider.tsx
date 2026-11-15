@@ -15,6 +15,7 @@ import type {
   CreateEventInput,
   EventStats,
   EventStatus,
+  UpdateEventInput,
 } from '@/lib/admin/types';
 import { useAdminAuth } from './AdminAuthProvider';
 import { useToast } from './ToastProvider';
@@ -35,6 +36,9 @@ interface EventsContextType {
   creating: boolean;
   // Resolves to the created event, or null when the request failed (already toasted)
   createEvent: (input: CreateEventInput) => Promise<AfterEvent | null>;
+  saving: boolean;
+  // Resolves to the updated event, or null when the request failed (already toasted)
+  updateEvent: (id: string, input: UpdateEventInput) => Promise<AfterEvent | null>;
   updatingOccupancy: boolean;
   // Resolves to the activity row the server wrote, or null when the request failed (already toasted)
   updateOccupancy: (id: string, delta: number) => Promise<Activity | null>;
@@ -60,7 +64,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
 
   const [events, setEvents] = useState<AfterEvent[]>([]);
   const [stats, setStats] = useState<EventStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Only an administrator's session loads anything
+  const [loading, setLoading] = useState(isAdmin);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedEvent, setSelectedEvent] = useState<AfterEvent | null>(null);
@@ -68,6 +73,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   const [eventError, setEventError] = useState<string | null>(null);
 
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [updatingOccupancy, setUpdatingOccupancy] = useState(false);
 
   // Incremented on every request, logout and unmount: older responses are ignored
@@ -179,6 +185,40 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     [reloadStats, showToast],
   );
 
+  const updateEvent = useCallback(
+    async (id: string, input: UpdateEventInput): Promise<AfterEvent | null> => {
+      const sessionId = session.current;
+      setSaving(true);
+
+      try {
+        const { data } = await adminApi.patch<ApiEvent>(`/api/events/${id}`, input);
+        if (sessionId !== session.current) return null;
+
+        const updated = toAfterEvent(data);
+        // upsert re-sorts: the start may have moved
+        setEvents((prev) => upsertEvent(prev, updated));
+        if (selectedId.current === id) {
+          // A GET /api/events/:id still in flight was sent before this change: drop its
+          // (older) response so it cannot overwrite the saved values
+          eventRequest.current++;
+          setEventLoading(false);
+          setEventError(null);
+          setSelectedEvent(updated);
+        }
+        void reloadStats();
+        showToast('Event updated', 'success');
+        return updated;
+      } catch (err) {
+        // 409 carries "Capacity cannot be lower than the current occupancy (<n> people)"
+        if (sessionId === session.current) showToast(getErrorMessage(err), 'error');
+        return null;
+      } finally {
+        if (sessionId === session.current) setSaving(false);
+      }
+    },
+    [reloadStats, showToast],
+  );
+
   const updateOccupancy = useCallback(
     async (id: string, delta: number): Promise<Activity | null> => {
       const sessionId = session.current;
@@ -251,6 +291,30 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  // After a Realtime outage (signals sent meanwhile are lost): re-read the list, the stats and
+  // the open event in the background, without the loading state or a toast
+  const resync = useCallback(async () => {
+    const sessionId = session.current;
+    // Not incremented: a reload the user started stays in charge of `loading`; this response is
+    // only applied if no newer list request started in the meantime
+    const listId = listRequest.current;
+    const statsId = ++statsRequest.current;
+    if (selectedId.current) void refreshEvent(selectedId.current);
+
+    try {
+      const [eventsResponse, statsResponse] = await Promise.all([
+        adminApi.get<ApiEvent[]>('/api/events'),
+        adminApi.get<EventStats>('/api/events/stats'),
+      ]);
+      if (sessionId !== session.current) return;
+      if (listId === listRequest.current) setEvents(eventsResponse.data.map(toAfterEvent));
+      if (statsId === statsRequest.current) setStats(statsResponse.data);
+    } catch (err) {
+      // The screen keeps its last data; the next signal or a reload brings it up to date
+      console.error('Realtime resync of events failed', err);
+    }
+  }, [refreshEvent]);
+
   // Changes made by any admin (this browser included) arrive through Supabase Broadcast
   useEffect(() => {
     if (!isAdmin) return;
@@ -260,6 +324,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
         void refreshEvent(id);
         scheduleStatsReload();
       },
+      onResync: () => void resync(),
     });
 
     const timer = statsTimer;
@@ -270,28 +335,15 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
       timer.current = null;
       refreshes.current.clear();
     };
-  }, [isAdmin, user?.id, refreshEvent, scheduleStatsReload]);
+  }, [isAdmin, user?.id, refreshEvent, resync, scheduleStatsReload]);
 
   useEffect(() => {
-    if (!isAdmin) {
-      // Logged out or not an admin (e.g. the login page): never fetch, drop previous data
-      listRequest.current++;
-      eventRequest.current++;
-      statsRequest.current++;
-      session.current++;
-      selectedId.current = null;
-      setCreating(false);
-      setUpdatingOccupancy(false);
-      setEvents([]);
-      setStats(null);
-      setError(null);
-      setLoading(false);
-      setSelectedEvent(null);
-      setEventError(null);
-      setEventLoading(false);
-      return;
-    }
-
+    // Logged out or not an admin (e.g. the login page): never fetch. AdminState re-creates this
+    // provider per user, so there is no previous session's data to drop here
+    if (!isAdmin) return;
+    // The fetch is the external system this effect syncs with: state only changes once the API
+    // answers (the loading flag already starts true, so the first update is a no-op)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reload();
   }, [isAdmin, user?.id, reload]);
 
@@ -338,6 +390,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
         loadEvent,
         creating,
         createEvent,
+        saving,
+        updateEvent,
         updatingOccupancy,
         updateOccupancy,
       }}

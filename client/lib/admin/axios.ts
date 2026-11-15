@@ -41,7 +41,8 @@ adminApi.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as RetriableConfig | undefined;
-    // Login/register answer 401 for wrong credentials: that is not an expired session
+    // Login/register answer 401 for wrong credentials: that is not an expired session. Logout is
+    // also excluded: refreshing a session that is being ended would only extend it
     const isAuthRoute = original?.url?.startsWith('/api/auth/') && !original.url.endsWith('/me');
 
     if (error.response?.status !== 401 || !original || original._retry || isAuthRoute) {

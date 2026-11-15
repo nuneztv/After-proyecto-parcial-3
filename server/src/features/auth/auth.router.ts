@@ -5,6 +5,7 @@ import {
   getMeController,
   loginAdminController,
   loginController,
+  logoutController,
   refreshController,
   registerAdminController,
   registerController,
@@ -17,4 +18,5 @@ router.post('/login', asyncHandler(loginController));
 router.post('/admin/register', asyncHandler(registerAdminController));
 router.post('/admin/login', asyncHandler(loginAdminController));
 router.post('/refresh', asyncHandler(refreshController));
+router.post('/logout', asyncHandler(authMiddleware), asyncHandler(logoutController));
 router.get('/me', asyncHandler(authMiddleware), asyncHandler(getMeController));

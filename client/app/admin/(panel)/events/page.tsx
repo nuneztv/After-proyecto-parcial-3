@@ -7,6 +7,7 @@ import { PillTabs } from '@/components/admin/PillTabs/PillTabs';
 import { EventCard } from '@/components/admin/EventCard/EventCard';
 import { CreateEventButton } from '@/components/admin/CreateEventButton/CreateEventButton';
 import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
+import { getEditEventPath } from '@/lib/admin/drafts';
 import type { EventStatus } from '@/lib/admin/types';
 
 type EventsFilter = 'all' | EventStatus;
@@ -42,7 +43,7 @@ const EventsPage = () => {
         <EmptyState title="No events here yet" />
       )}
       {visibleEvents.map((event) => (
-        <EventCard key={event.id} event={event} />
+        <EventCard key={event.id} event={event} href={getEditEventPath(event.id)} />
       ))}
 
       <CreateEventButton />

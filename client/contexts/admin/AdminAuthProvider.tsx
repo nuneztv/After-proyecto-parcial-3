@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminApi } from '@/lib/admin/axios';
@@ -21,7 +21,10 @@ interface AdminAuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterInput) => Promise<boolean>;
-  logout: () => void;
+  // a logout request is in flight
+  loggingOut: boolean;
+  // Always ends logged out, even when the API call fails
+  logout: () => Promise<void>;
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
@@ -35,10 +38,15 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const logoutInFlight = useRef(false);
 
   // Restore the session, then confirm it with the API (a 401 there triggers the refresh flow)
   useEffect(() => {
     const stored = getAdminSession();
+    // localStorage only exists in the browser: reading it during render would make the first
+    // client render differ from the server HTML, so the session is restored after hydration
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUser(stored?.user ?? null);
     setReady(true);
 
@@ -120,15 +128,31 @@ export const AdminAuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = () => {
-    setAdminSession(null);
-    setUser(null);
-    showToast('You have logged out', 'info');
-    router.replace(LOGIN_PATH);
+  const logout = async () => {
+    // A ref, not the state: a second click in the same render must not send a second request
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
+    setLoggingOut(true);
+
+    try {
+      // Revokes this session's refresh token on the server (the access token stays valid until it
+      // expires). An /api/auth/ route, so a 401 here is never refreshed and retried by adminApi
+      await adminApi.post('/api/auth/logout');
+    } catch (error) {
+      // Best-effort: an expired session or an API failure must not keep the admin logged in
+      console.error('Logout request failed', error);
+    } finally {
+      setAdminSession(null);
+      setUser(null);
+      logoutInFlight.current = false;
+      setLoggingOut(false);
+      showToast('You have logged out', 'info');
+      router.replace(LOGIN_PATH);
+    }
   };
 
   return (
-    <AdminAuthContext.Provider value={{ user, ready, loading, login, register, logout }}>
+    <AdminAuthContext.Provider value={{ user, ready, loading, login, register, loggingOut, logout }}>
       {children}
     </AdminAuthContext.Provider>
   );

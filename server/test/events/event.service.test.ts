@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { before, beforeEach, mock, test } from 'node:test';
-import { CreateEventDTO } from '../../src/features/events/event.types';
+import { CreateEventDTO, UpdateEventDTO } from '../../src/features/events/event.types';
 import { asyncMock, statusOf } from '../helpers/supabaseMocks';
 import {
   checkedInEvent,
   checkInActivity,
   createdEvent,
+  editedEvent,
   EVENT_ID,
   MISSING_EVENT_ID,
   rooftopActivity,
@@ -20,6 +21,9 @@ const findEventActivityRepository = asyncMock();
 const findRecentActivityRepository = asyncMock();
 const createEventRepository = asyncMock();
 const updateOccupancyRepository = asyncMock();
+const updateEventRepository = asyncMock();
+// Replaces lib/storage so the image ownership rule is observable without a real Supabase URL
+const isUserImageUrl = mock.fn((_url: string, _userId: string): boolean => true);
 // Replaces lib/realtime so no test ever sends a real broadcast to Supabase
 const broadcast = asyncMock();
 
@@ -32,7 +36,12 @@ mock.module('../../src/features/events/event.repository', {
     findRecentActivityRepository,
     createEventRepository,
     updateOccupancyRepository,
+    updateEventRepository,
   },
+});
+
+mock.module('../../src/lib/storage', {
+  namedExports: { isUserImageUrl },
 });
 
 mock.module('../../src/lib/realtime', {
@@ -62,8 +71,10 @@ beforeEach(() => {
     findRecentActivityRepository,
     createEventRepository,
     updateOccupancyRepository,
+    updateEventRepository,
     broadcast,
   ].forEach((fn) => fn.mock.resetCalls());
+  isUserImageUrl.mock.resetCalls();
 });
 
 test('getEventsService passes the filters to the repository', async () => {
@@ -140,6 +151,14 @@ test('getEventActivityService returns the activity rows', async () => {
   findEventActivityRepository.mock.mockImplementation(async () => [rooftopActivity]);
 
   const activity = await service.getEventActivityService(EVENT_ID, 50);
+
+  assert.deepEqual(activity, [rooftopActivity]);
+});
+
+test('getRecentActivityService returns the rows with their nested event unchanged', async () => {
+  findRecentActivityRepository.mock.mockImplementation(async () => [rooftopActivity]);
+
+  const activity = await service.getRecentActivityService(20);
 
   assert.deepEqual(activity, [rooftopActivity]);
 });
@@ -271,5 +290,126 @@ test('updateOccupancyService does not broadcast when occupancy would leave 0..ca
   updateOccupancyRepository.mock.mockImplementation(async () => ({ kind: 'out-of-range' }));
 
   await assert.rejects(() => service.updateOccupancyService(EVENT_ID, 50));
+  assert.equal(broadcast.mock.callCount(), 0);
+});
+
+const updateDto: UpdateEventDTO = { title: 'Rooftop Sessions XL', capacity: 450 };
+
+const updateReturns = (result: unknown): void => {
+  updateEventRepository.mock.mockImplementation(async () => result);
+};
+
+// The image predicate the service handed to the repository on its first call
+const imagePredicate = (): ((imageUrl: string) => boolean) =>
+  updateEventRepository.mock.calls[0].arguments[2] as (imageUrl: string) => boolean;
+
+test('updateEventService passes the id and DTO to the repository', async () => {
+  updateReturns({ kind: 'ok', event: editedEvent });
+
+  await service.updateEventService(EVENT_ID, updateDto, 'user-1');
+
+  assert.deepEqual(updateEventRepository.mock.calls[0].arguments.slice(0, 2), [
+    EVENT_ID,
+    { title: 'Rooftop Sessions XL', capacity: 450 },
+  ]);
+});
+
+test('updateEventService returns the updated event', async () => {
+  updateReturns({ kind: 'ok', event: editedEvent });
+
+  const event = await service.updateEventService(EVENT_ID, updateDto, 'user-1');
+
+  assert.deepEqual(event, editedEvent);
+});
+
+test('updateEventService checks a new image with isUserImageUrl and the caller user id', async () => {
+  updateReturns({ kind: 'ok', event: editedEvent });
+
+  await service.updateEventService(EVENT_ID, updateDto, 'user-1');
+  imagePredicate()('https://cdn.example.com/new.png');
+
+  assert.deepEqual(isUserImageUrl.mock.calls[0].arguments, [
+    'https://cdn.example.com/new.png',
+    'user-1',
+  ]);
+});
+
+test('updateEventService image predicate returns what isUserImageUrl answers', async () => {
+  updateReturns({ kind: 'ok', event: editedEvent });
+  isUserImageUrl.mock.mockImplementationOnce(() => false);
+
+  await service.updateEventService(EVENT_ID, updateDto, 'user-1');
+
+  assert.equal(imagePredicate()('https://evil.example.com/x.png'), false);
+});
+
+test('updateEventService throws 404 "Event not found" when the event does not exist', async () => {
+  updateReturns({ kind: 'not-found' });
+
+  await assert.rejects(
+    () => service.updateEventService(MISSING_EVENT_ID, updateDto, 'user-1'),
+    (error) => statusOf(error) === 404 && (error as Error).message === 'Event not found',
+  );
+});
+
+test('updateEventService throws 409 with the occupancy when capacity is below it', async () => {
+  updateReturns({ kind: 'capacity-below-occupancy', occupied: 342 });
+
+  await assert.rejects(
+    () => service.updateEventService(EVENT_ID, { capacity: 100 }, 'user-1'),
+    (error) =>
+      statusOf(error) === 409 &&
+      (error as Error).message ===
+        'Capacity cannot be lower than the current occupancy (342 people)',
+  );
+});
+
+test('updateEventService throws 400 "End must be after start" against the stored dates', async () => {
+  updateReturns({ kind: 'ends-before-start' });
+
+  await assert.rejects(
+    () => service.updateEventService(EVENT_ID, { startsAt: '2026-11-16T00:00:00Z' }, 'user-1'),
+    (error) => statusOf(error) === 400 && (error as Error).message === 'End must be after start',
+  );
+});
+
+test('updateEventService throws 400 "Invalid image URL" for another user\'s new image', async () => {
+  updateReturns({ kind: 'image-not-allowed' });
+
+  await assert.rejects(
+    () =>
+      service.updateEventService(EVENT_ID, { imageUrl: 'https://evil.example.com/x.png' }, 'user-1'),
+    (error) => statusOf(error) === 400 && (error as Error).message === 'Invalid image URL',
+  );
+});
+
+test('updateEventService broadcasts event-updated with only the event id on success', async () => {
+  updateReturns({ kind: 'ok', event: editedEvent });
+
+  await service.updateEventService(EVENT_ID, updateDto, 'user-1');
+
+  assert.deepEqual(broadcastArgs(), [['events', 'event-updated', { id: EVENT_ID }]]);
+});
+
+for (const result of [
+  { kind: 'not-found' },
+  { kind: 'capacity-below-occupancy', occupied: 342 },
+  { kind: 'ends-before-start' },
+  { kind: 'image-not-allowed' },
+]) {
+  test(`updateEventService does not broadcast on ${result.kind}`, async () => {
+    updateReturns(result);
+
+    await assert.rejects(() => service.updateEventService(EVENT_ID, updateDto, 'user-1'));
+    assert.equal(broadcast.mock.callCount(), 0);
+  });
+}
+
+test('updateEventService does not broadcast when the repository throws', async () => {
+  updateEventRepository.mock.mockImplementation(async () => {
+    throw new Error('update failed');
+  });
+
+  await assert.rejects(() => service.updateEventService(EVENT_ID, updateDto, 'user-1'));
   assert.equal(broadcast.mock.callCount(), 0);
 });

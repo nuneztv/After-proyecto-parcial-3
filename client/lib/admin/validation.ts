@@ -29,10 +29,23 @@ export const EVENT_CAPACITY_MAX = 100000;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-const isValidDate = (value: string): boolean =>
-  DATE_PATTERN.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+// Date.parse rolls impossible days over (2026-02-30 -> March 2): rebuild the day and compare
+const isValidDate = (value: string): boolean => {
+  if (!DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
 
-export const validateEventDraft = (draft: EventDraft): EventDraftErrors => {
+interface EventDraftRules {
+  // Edit mode: the current occupancy; the API answers 409 below it
+  minCapacity?: number;
+}
+
+export const validateEventDraft = (
+  draft: EventDraft,
+  { minCapacity }: EventDraftRules = {},
+): EventDraftErrors => {
   const errors: EventDraftErrors = {};
   const title = draft.title.trim();
   const venueName = draft.venueName.trim();
@@ -54,10 +67,25 @@ export const validateEventDraft = (draft: EventDraft): EventDraftErrors => {
   if (!isValidDate(draft.date)) errors.date = 'Select the date';
   if (!TIME_PATTERN.test(draft.time)) errors.time = 'Select the start time';
 
-  if (draft.endTime) {
-    if (!TIME_PATTERN.test(draft.endTime)) errors.endTime = 'End time is invalid';
-    // An earlier end time means the event ends the next day (see toCreateEventInput)
-    else if (draft.endTime === draft.time) errors.endTime = 'End time must be after the start time';
+  if (draft.endTime && !TIME_PATTERN.test(draft.endTime)) errors.endTime = 'End time is invalid';
+
+  if (draft.endDate) {
+    if (!isValidDate(draft.endDate)) errors.endDate = 'End date is invalid';
+    else if (!draft.endTime) errors.endTime = 'Select the end time';
+    else if (isValidDate(draft.date) && draft.endDate < draft.date) {
+      errors.endDate = 'End date cannot be before the start date';
+    } else if (
+      !errors.endTime &&
+      !errors.date &&
+      !errors.time &&
+      // Same-format strings ('YYYY-MM-DDTHH:mm') compare in chronological order
+      `${draft.endDate}T${draft.endTime}` <= `${draft.date}T${draft.time}`
+    ) {
+      errors.endTime = 'End must be after the start';
+    }
+  } else if (draft.endTime && !errors.endTime && draft.endTime === draft.time) {
+    // Without an end date an earlier end time means the next day (see toCreateEventInput)
+    errors.endTime = 'End time must be after the start time';
   }
 
   const capacity = Number(draft.capacity);
@@ -67,6 +95,9 @@ export const validateEventDraft = (draft: EventDraft): EventDraftErrors => {
     capacity > EVENT_CAPACITY_MAX
   ) {
     errors.capacity = `Capacity must be a whole number between ${EVENT_CAPACITY_MIN} and ${EVENT_CAPACITY_MAX}`;
+  } else if (minCapacity !== undefined && capacity < minCapacity) {
+    // Same message as the API's 409
+    errors.capacity = `Capacity cannot be lower than the current occupancy (${minCapacity} people)`;
   }
 
   if (!draft.location) errors.location = 'Select the location on the map';

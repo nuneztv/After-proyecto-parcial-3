@@ -8,9 +8,11 @@ import { CapacityBar } from '../CapacityBar/CapacityBar';
 interface EventCardProps {
   event: AfterEvent;
   liveControl?: boolean;
+  // Makes the whole card a link (e.g. to the edit form); liveControl takes precedence
+  href?: string;
 }
 
-export const EventCard = ({ event, liveControl = false }: EventCardProps) => {
+export const EventCard = ({ event, liveControl = false, href }: EventCardProps) => {
   const card = (
     <>
       <Image
@@ -40,6 +42,14 @@ export const EventCard = ({ event, liveControl = false }: EventCardProps) => {
   if (liveControl) {
     return (
       <Link href={`/admin/live/${event.id}`} className="event-card">
+        {card}
+      </Link>
+    );
+  }
+
+  if (href) {
+    return (
+      <Link href={href} className="event-card">
         {card}
       </Link>
     );

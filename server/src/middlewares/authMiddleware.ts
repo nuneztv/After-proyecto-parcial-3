@@ -13,13 +13,20 @@ declare global {
   }
 }
 
-// Async: wrap it with asyncHandler in routers (Express 4 does not forward rejected promises)
-export const authMiddleware = async (req: Request, _res: Response, next: NextFunction) => {
+// Raw access token of the request; also used by logout, which must revoke this exact session
+export const getBearerToken = (req: Request): string => {
   const [scheme, token] = (req.headers.authorization ?? '').split(' ');
 
   if (scheme !== 'Bearer' || !token) {
     throw Boom.unauthorized('Missing or malformed Authorization header');
   }
+
+  return token;
+};
+
+// Async: wrap it with asyncHandler in routers (Express 4 does not forward rejected promises)
+export const authMiddleware = async (req: Request, _res: Response, next: NextFunction) => {
+  const token = getBearerToken(req);
 
   const { data, error } = await getSupabase().auth.getUser(token);
 

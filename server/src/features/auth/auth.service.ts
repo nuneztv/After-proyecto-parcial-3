@@ -106,3 +106,22 @@ export const refreshService = async (refreshToken: string): Promise<Session> => 
 };
 
 export const getMeService = async (userId: string): Promise<Profile> => getProfileByIdService(userId);
+
+// scope 'local' revokes the refresh token(s) of this session only, so other devices stay
+// signed in. The access token is a stateless JWT and stays valid until it expires (~1 h)
+export const logoutService = async (accessToken: string): Promise<void> => {
+  let failure: unknown;
+
+  try {
+    const { error } = await getSupabase().auth.admin.signOut(accessToken, 'local');
+    failure = error;
+  } catch (error) {
+    // auth-js returns AuthErrors but rethrows anything else (e.g. an unexpected fetch failure)
+    failure = error;
+  }
+
+  if (failure) {
+    console.error('Supabase signOut failed', failure);
+    throw Boom.badGateway('Logout failed');
+  }
+};

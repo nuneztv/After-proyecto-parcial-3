@@ -34,6 +34,19 @@ export interface EventActivity {
   createdAt: string;
 }
 
+// The event a feed row belongs to, nested by SQL (json_build_object) in the read queries
+export interface ActivityEventSummary {
+  id: string;
+  title: string;
+  status: EventStatus;
+}
+
+// Read endpoints (GET /api/events/activity, GET /api/events/:id/activity) add `event`; the
+// fields of EventActivity stay unchanged, so the contract only grows
+export interface EventActivityWithEvent extends EventActivity {
+  event: ActivityEventSummary;
+}
+
 export interface EventStats {
   peopleNow: number;
   activeEvents: number;
@@ -61,6 +74,19 @@ export interface CreateEventDTO {
   // Public URL returned by POST /api/uploads/images; ownership is checked in the controller
   imageUrl: string | null;
 }
+
+// PATCH /api/events/:id: omitted fields stay unchanged. Status, occupied (own endpoint) and
+// categories are not editable here. address: null means "reset to the stored venue name"
+export type UpdateEventDTO = Partial<Omit<CreateEventDTO, 'categories' | 'address'>> & {
+  address?: string | null;
+};
+
+export type UpdateEventResult =
+  | { kind: 'ok'; event: Event }
+  | { kind: 'not-found' }
+  | { kind: 'capacity-below-occupancy'; occupied: number }
+  | { kind: 'ends-before-start' }
+  | { kind: 'image-not-allowed' };
 
 export interface OccupancyUpdate {
   event: Event;

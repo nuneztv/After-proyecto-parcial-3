@@ -7,6 +7,7 @@ import {
   getEventsService,
   getEventStatsService,
   getRecentActivityService,
+  updateEventService,
   updateOccupancyService,
 } from './event.service';
 import {
@@ -16,6 +17,7 @@ import {
   parseEventFilters,
   parseEventId,
   parseOccupancyDelta,
+  parseUpdateEventBody,
 } from './event.validation';
 
 const RECENT_ACTIVITY_DEFAULT_LIMIT = 20;
@@ -55,7 +57,15 @@ export const createEventController = async (req: Request, res: Response) => {
   res.status(201).json(await createEventService(dto, user.id));
 };
 
-export const updateOccupancyController = async (req: Request, res: Response) => {
+export const updateEventController = async (req: Request, res: Response) => {
+  const eventId = parseEventId(req.params.id);
+  const dto = parseUpdateEventBody(req.body);
+  const user = getUserFromRequest(req);
+
+  res.status(200).json(await updateEventService(eventId, dto, user.id));
+};
+
+export const updateOccupancyController =async (req: Request, res: Response) => {
   const eventId = parseEventId(req.params.id);
   const delta = parseOccupancyDelta(req.body);
 

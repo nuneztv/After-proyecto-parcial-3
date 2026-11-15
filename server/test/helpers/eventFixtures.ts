@@ -1,4 +1,9 @@
-import { Event, EventActivity, EventStats } from '../../src/features/events/event.types';
+import {
+  Event,
+  EventActivity,
+  EventActivityWithEvent,
+  EventStats,
+} from '../../src/features/events/event.types';
 
 // Hand-written event rows shaped like the repository output (camelCase, ISO dates)
 
@@ -26,11 +31,13 @@ export const rooftopEvent: Event = {
   createdAt: '2026-11-14T00:00:00.000Z',
 };
 
-export const rooftopActivity: EventActivity = {
+// Read endpoints return feed rows with their event nested (json_build_object)
+export const rooftopActivity: EventActivityWithEvent = {
   id: 'a0000000-0000-4000-8000-000000000001',
   eventId: EVENT_ID,
   message: 'Rooftop Sessions is live at Skyline Rooftop',
   createdAt: '2026-11-14T23:00:00.000Z',
+  event: { id: EVENT_ID, title: 'Rooftop Sessions', status: 'live' },
 };
 
 // Values the stats CTE returns on the seed data
@@ -84,3 +91,6 @@ export const checkInActivity: EventActivity = {
   message: '+1 check-in at Rooftop Sessions (343/400)',
   createdAt: '2026-11-14T23:30:00.000Z',
 };
+
+// Row returned by PATCH /api/events/:id after the admin renamed the event and raised the capacity
+export const editedEvent: Event = { ...rooftopEvent, title: 'Rooftop Sessions XL', capacity: 450 };

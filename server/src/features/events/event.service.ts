@@ -1,5 +1,6 @@
 import Boom from '@hapi/boom';
 import { broadcast, EVENTS_CHANNEL, REALTIME_EVENTS } from '../../lib/realtime';
+import { isUserImageUrl } from '../../lib/storage';
 import {
   createEventRepository,
   findEventActivityRepository,
@@ -7,15 +8,17 @@ import {
   findEventsRepository,
   findRecentActivityRepository,
   getEventStatsRepository,
+  updateEventRepository,
   updateOccupancyRepository,
 } from './event.repository';
 import {
   CreateEventDTO,
   Event,
-  EventActivity,
+  EventActivityWithEvent,
   EventFilters,
   EventStats,
   OccupancyUpdate,
+  UpdateEventDTO,
 } from './event.types';
 
 export const getEventsService = async (filters: EventFilters): Promise<Event[]> =>
@@ -37,13 +40,15 @@ export const getEventStatsService = async (): Promise<EventStats> => getEventSta
 export const getEventActivityService = async (
   eventId: string,
   limit: number,
-): Promise<EventActivity[]> => {
+): Promise<EventActivityWithEvent[]> => {
   await getEventByIdService(eventId);
 
   return findEventActivityRepository(eventId, limit);
 };
 
-export const getRecentActivityService = async (limit: number): Promise<EventActivity[]> =>
+export const getRecentActivityService = async (
+  limit: number,
+): Promise<EventActivityWithEvent[]> =>
   findRecentActivityRepository(limit);
 
 // Broadcasts are not awaited: they never throw and must not delay the response
@@ -53,6 +58,40 @@ export const createEventService = async (dto: CreateEventDTO, userId: string): P
   void broadcast(EVENTS_CHANNEL, REALTIME_EVENTS.eventCreated, { id: event.id });
 
   return event;
+};
+
+// A new image must come from this admin's Storage folder; keeping the stored one (a seed path or
+// another admin's upload) is always allowed, and the repository compares it under the row lock
+export const updateEventService = async (
+  id: string,
+  dto: UpdateEventDTO,
+  userId: string,
+): Promise<Event> => {
+  const result = await updateEventRepository(id, dto, (imageUrl) =>
+    isUserImageUrl(imageUrl, userId),
+  );
+
+  if (result.kind === 'not-found') {
+    throw Boom.notFound('Event not found');
+  }
+
+  if (result.kind === 'capacity-below-occupancy') {
+    throw Boom.conflict(
+      `Capacity cannot be lower than the current occupancy (${result.occupied} people)`,
+    );
+  }
+
+  if (result.kind === 'ends-before-start') {
+    throw Boom.badRequest('End must be after start');
+  }
+
+  if (result.kind === 'image-not-allowed') {
+    throw Boom.badRequest('Invalid image URL');
+  }
+
+  void broadcast(EVENTS_CHANNEL, REALTIME_EVENTS.eventUpdated, { id: result.event.id });
+
+  return result.event;
 };
 
 export const updateOccupancyService = async (
