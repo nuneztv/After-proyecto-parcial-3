@@ -1,6 +1,16 @@
-import { findAllProducts, findProductById } from "./product.repository";
-import { Product } from "./product.types";
+import Boom from '@hapi/boom';
+import { findProductByIdRepository, findProductsRepository } from './product.repository';
+import { Product, ProductFilters } from './product.types';
 
-export const getProductsService = (): Product[] => findAllProducts();
+export const getProductsService = async (filters: ProductFilters): Promise<Product[]> =>
+  findProductsRepository(filters);
 
-export const getProductByIdService = (id: string): Product => findProductById(id);
+export const getProductByIdService = async (id: string): Promise<Product> => {
+  const product = await findProductByIdRepository(id);
+
+  if (!product) {
+    throw Boom.notFound('Product not found');
+  }
+
+  return product;
+};

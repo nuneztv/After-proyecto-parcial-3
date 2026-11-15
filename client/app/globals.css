@@ -1054,3 +1054,92 @@ button {
     max-height: 844px;
   }
 }
+
+/* Toasts (contexts/ToastProvider.tsx): confirmations and API errors, above the bottom nav */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(27, 18, 40, 0.16);
+  cursor: pointer;
+}
+
+.toast.success {
+  background: #e8fff4;
+  color: #146047;
+}
+
+.toast.error {
+  background: #ffe8e4;
+  color: #9a2b1d;
+}
+
+.toast.info {
+  background: #fff;
+  color: #6d5b7c;
+}
+
+/* Profile panels (Badges, Notifications, Settings, Help): open below their menu item */
+.profile-panel {
+  display: grid;
+  gap: 10px;
+  margin: -4px 0 12px;
+}
+
+.panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.panel-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  text-align: left;
+}
+
+button.panel-item {
+  cursor: pointer;
+}
+
+.panel-item.locked {
+  opacity: 0.55;
+}
+
+.panel-faq summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panel-faq p {
+  margin: 6px 0 0;
+  font-size: 14px;
+}

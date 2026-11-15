@@ -1,40 +1,84 @@
-import { SessionUser } from "@/types/models";
+import { AuthTokens, StoredSession } from "@/types/models";
 
+// The admin app uses its own key ("after-admin-session"): both apps can be logged in at once
 const SESSION_KEY = "after-session";
-const SAVED_KEY = "after-saved";
 
-export const getStoredSession = (): SessionUser | null => {
+// Fired when the session is cleared because it expired (the refresh failed)
+export const SESSION_CLEARED_EVENT = "after:session-cleared";
+
+// Sessions saved by the old mock login have no tokens: they are discarded, not trusted
+const isStoredSession = (value: unknown): value is StoredSession => {
+  const session = value as Partial<StoredSession> | null;
+  return (
+    typeof session?.accessToken === "string" &&
+    typeof session.refreshToken === "string" &&
+    typeof session.user?.id === "string"
+  );
+};
+
+export const getStoredSession = (): StoredSession | null => {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SessionUser;
+    const parsed: unknown = JSON.parse(raw);
+    if (isStoredSession(parsed)) return parsed;
   } catch {
-    return null;
+    // Corrupted value: fall through and remove it
   }
+  window.localStorage.removeItem(SESSION_KEY);
+  return null;
 };
 
-export const setStoredSession = (user: SessionUser | null) => {
+export const setStoredSession = (session: StoredSession | null): void => {
   if (typeof window === "undefined") return;
-  if (user) {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  if (session) {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } else {
     window.localStorage.removeItem(SESSION_KEY);
   }
 };
 
-export const getSavedIds = (userId: string): string[] => {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(`${SAVED_KEY}-${userId}`);
-  if (!raw) return userId === "cli-1" ? ["evt-1", "evt-4", "evt-5"] : [];
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    return [];
+export const updateStoredTokens = (tokens: AuthTokens): void => {
+  const current = getStoredSession();
+  if (current) setStoredSession({ ...current, ...tokens });
+};
+
+// Settings > "Use my location" on this device (only the choice, never the coordinates)
+const LOCATION_KEY = "after-use-location";
+
+export const getLocationPreference = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(LOCATION_KEY) === "true";
+};
+
+export const setLocationPreference = (enabled: boolean): void => {
+  if (typeof window === "undefined") return;
+  if (enabled) window.localStorage.setItem(LOCATION_KEY, "true");
+  else window.localStorage.removeItem(LOCATION_KEY);
+};
+
+// Where to go after a Google/Apple sign-in: the ?next= of the login page survives the trip to the
+// provider in sessionStorage (this tab only)
+const OAUTH_NEXT_KEY = "after-oauth-next";
+
+export const setOAuthNext = (next: string): void => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(OAUTH_NEXT_KEY, next);
+};
+
+// Read once: the value is removed so an old destination never leaks into a later sign-in
+export const takeOAuthNext = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const next = window.sessionStorage.getItem(OAUTH_NEXT_KEY);
+  window.sessionStorage.removeItem(OAUTH_NEXT_KEY);
+  return next;
+};
+
+export const expireStoredSession = (): void => {
+  setStoredSession(null);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_CLEARED_EVENT));
   }
 };
 
-export const setSavedIds = (userId: string, ids: string[]) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(`${SAVED_KEY}-${userId}`, JSON.stringify(ids));
-};

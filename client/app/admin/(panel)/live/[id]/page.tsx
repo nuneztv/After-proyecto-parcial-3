@@ -4,28 +4,34 @@ import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useEvents } from '@/contexts/admin/EventsProvider';
 import { useActivity } from '@/contexts/admin/ActivityProvider';
-import { getCapacityPercent } from '@/lib/admin/capacity';
+import { getCapacityPercent, getCapacityTag } from '@/lib/admin/capacity';
 import { PageHeader } from '@/components/admin/PageHeader/PageHeader';
 import { StatusBadge } from '@/components/admin/StatusBadge/StatusBadge';
 import { ActivityList } from '@/components/admin/ActivityList/ActivityList';
 import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
+import { OccupancyControl } from '@/components/admin/OccupancyControl/OccupancyControl';
+import { useOccupancy } from '@/hooks/admin/useOccupancy';
 
 const LiveControlPage = () => {
   const { id } = useParams<{ id: string }>();
   const { selectedEvent, eventLoading, eventError, loadEvent } = useEvents();
-  const { eventActivities, loadEventActivity } = useActivity();
+  const { eventActivities, eventActivityLoading, eventActivityError, loadEventActivity } =
+    useActivity();
+  const { changeOccupancy, updating } = useOccupancy();
 
+  // The providers ignore stale responses, so switching ids never shows the previous event
   useEffect(() => {
-    loadEvent(id);
-    loadEventActivity(id);
+    void loadEvent(id);
+    void loadEventActivity(id);
   }, [id, loadEvent, loadEventActivity]);
 
   const event = selectedEvent?.id === id ? selectedEvent : null;
   const percent = event ? getCapacityPercent(event.attendees, event.capacity) : 0;
+  const tag = getCapacityTag(percent);
 
-  let tag = '';
-  if (percent >= 100) tag = 'FULL';
-  else if (percent >= 80) tag = 'ALMOST FULL';
+  const handleOccupancyChange = (delta: number) => {
+    if (event) void changeOccupancy(event.id, delta);
+  };
 
   return (
     <>
@@ -58,8 +64,22 @@ const LiveControlPage = () => {
             </div>
           </div>
 
+          <OccupancyControl
+            occupied={event.attendees}
+            capacity={event.capacity}
+            updating={updating}
+            onChange={handleOccupancyChange}
+          />
+
           <h2 className="live-activity-title">Live Activity</h2>
-          <ActivityList activities={eventActivities} bordered />
+          {eventActivityLoading && <EmptyState title="Loading activity..." />}
+          {eventActivityError && (
+            <EmptyState title="Something went wrong" subtitle={eventActivityError} />
+          )}
+          {!eventActivityLoading && !eventActivityError && eventActivities.length === 0 && (
+            <EmptyState title="No activity yet" />
+          )}
+          {eventActivities.length > 0 && <ActivityList activities={eventActivities} bordered />}
         </>
       )}
     </>

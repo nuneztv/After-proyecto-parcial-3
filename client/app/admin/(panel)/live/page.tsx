@@ -7,23 +7,31 @@ import { PillTabs } from '@/components/admin/PillTabs/PillTabs';
 import { EventCard } from '@/components/admin/EventCard/EventCard';
 import { CreateEventButton } from '@/components/admin/CreateEventButton/CreateEventButton';
 import { EmptyState } from '@/components/admin/EmptyState/EmptyState';
+import type { EventStatus } from '@/lib/admin/types';
 
-const tabs = [
+const tabs: { value: EventStatus; label: string }[] = [
   { value: 'upcoming', label: 'Open' },
   { value: 'live', label: 'Set Live' },
   { value: 'closed', label: 'Closed' },
 ];
 
-const LivePage = () => {
-  const { events, loading, error } = useEvents();
-  const [selected, setSelected] = useState('live');
+const isEventStatus = (value: string): value is EventStatus =>
+  tabs.some((tab) => tab.value === value);
 
-  const visibleEvents = events.filter((event) => event.status === selected);
+const LivePage = () => {
+  const { eventsByStatus, loading, error } = useEvents();
+  const [selected, setSelected] = useState<EventStatus>('live');
+
+  const visibleEvents = eventsByStatus[selected];
+
+  const handleSelect = (value: string) => {
+    if (isEventStatus(value)) setSelected(value);
+  };
 
   return (
     <>
       <PageHeader title="Live" backHref="/admin/overview" />
-      <PillTabs options={tabs} selected={selected} onSelect={setSelected} />
+      <PillTabs options={tabs} selected={selected} onSelect={handleSelect} />
 
       {loading && <EmptyState title="Loading events..." />}
       {error && <EmptyState title="Something went wrong" subtitle={error} />}

@@ -1,12 +1,14 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
-import { StatusBadge } from "@/components/StatusBadge";
-import { AfterLogo } from "@/components/AfterLogo";
-import { IconPin, IconSearch } from "@/components/Icons";
-import { useData } from "@/contexts/DataProvider";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
+import { EventCard } from "@/components/EventCard/EventCard";
+import { AfterLogo } from "@/components/AfterLogo/AfterLogo";
+import { IconPin, IconSearch } from "@/components/Icons/Icons";
+import { useSavedEvents } from "@/contexts/SavedEventsProvider";
+import { useEvents } from "@/contexts/EventsProvider";
 
 const categories = ["all", "music", "party", "rooftop", "bar"];
 
@@ -18,17 +20,13 @@ const statusLabel = (status: string) => {
 
 export default function HomePage() {
   const router = useRouter();
-  const { events, loading, error, loadEvents, filters, toggleSaved, savedIds } = useData();
+  const { events, happening, tonight, trending, loading, error, filters, setFilters } = useEvents();
+  const { toggleSaved, savedIds } = useSavedEvents();
 
   const searching = filters.search.trim().length > 0;
-  const happening = events.filter((item) => item.section === "happening");
-  const tonight = events.filter((item) => item.section === "tonight");
-  const trending =
-    events.find((item) => item.section === "trending" && item.id === "evt-5") ||
-    events.find((item) => item.section === "trending");
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen>
         <div className="topbar">
           <AfterLogo size="sm" />
@@ -41,8 +39,8 @@ export default function HomePage() {
           <IconSearch />
           <input
             value={filters.search}
-            onChange={(e) => loadEvents({ search: e.target.value, maxDistance: 10 })}
-            placeholder="Search events,venus or categories ..."
+            onChange={(e) => setFilters({ search: e.target.value, maxDistance: 10 })}
+            placeholder="Search events, venues or categories ..."
             aria-label="Search events"
           />
         </div>
@@ -51,7 +49,7 @@ export default function HomePage() {
             <button
               key={category}
               className={`chip ${filters.category === category ? "active" : ""}`}
-              onClick={() => loadEvents({ category, search: filters.search })}
+              onClick={() => setFilters({ category })}
             >
               {category === "all" ? "All" : category[0].toUpperCase() + category.slice(1)}
             </button>
@@ -62,24 +60,7 @@ export default function HomePage() {
         {!loading && events.length === 0 ? <p className="empty">No events match this search.</p> : null}
         {searching
           ? events.map((event) => (
-              <article key={event.id} className="event-card">
-                <button className="cover" onClick={() => router.push(`/events/${event.id}`)}>
-                  <img src={event.imageUrl} alt={event.title} />
-                  <StatusBadge status={event.status} />
-                </button>
-                <div className="card-body">
-                  <h3>{event.title}</h3>
-                  <p className="muted">{event.venueName}</p>
-                  <div className="meta-row">
-                    <span className="meta-pin">
-                      <IconPin /> {event.distanceKm} km
-                    </span>
-                    <span>
-                      {event.occupied}/{event.capacity}
-                    </span>
-                  </div>
-                </div>
-              </article>
+              <EventCard key={event.id} event={event} onOpen={(id) => router.push(`/events/${id}`)} />
             ))
           : null}
         {!searching ? (
@@ -91,27 +72,10 @@ export default function HomePage() {
               </button>
             </div>
             {happening.map((event) => (
-              <article key={event.id} className="event-card">
-                <button className="cover" onClick={() => router.push(`/events/${event.id}`)}>
-                  <img src={event.imageUrl} alt={event.title} />
-                  <StatusBadge status={event.status} />
-                </button>
-                <div className="card-body">
-                  <h3>{event.title}</h3>
-                  <p className="muted">{event.venueName}</p>
-                  <div className="meta-row">
-                    <span className="meta-pin">
-                      <IconPin /> {event.distanceKm} km
-                    </span>
-                    <span>
-                      {event.occupied}/{event.capacity}
-                    </span>
-                  </div>
-                </div>
-              </article>
+              <EventCard key={event.id} event={event} onOpen={(id) => router.push(`/events/${id}`)} />
             ))}
             <div className="section-head">
-              <h2>Tonight's Pick ✨</h2>
+              <h2>Tonight&apos;s Pick ✨</h2>
             </div>
             <div className="tonight-grid">
               {tonight.slice(0, 2).map((event) => (
@@ -120,7 +84,7 @@ export default function HomePage() {
                   className="mini-card"
                   onClick={() => router.push(`/events/${event.id}`)}
                 >
-                  <img src={event.imageUrl} alt={event.title} />
+                  <Image src={event.imageUrl} alt={event.title} width={200} height={150} unoptimized />
                   <span className={`mini-badge badge ${event.status}`}>{statusLabel(event.status)}</span>
                   <div className="overlay">
                     <h3>{event.title}</h3>
@@ -134,7 +98,7 @@ export default function HomePage() {
             {trending ? (
               <article className="promo">
                 <button className="promo-frame" onClick={() => router.push(`/events/${trending.id}`)}>
-                  <img className="promo-art" src="/retro.png" alt="Retro Night" />
+                  <img className="promo-art" src={trending.imageUrl} alt={trending.title} />
                 </button>
                 <button className="btn small promo-save" onClick={() => toggleSaved(trending.id)}>
                   {savedIds.includes(trending.id) ? "Saved" : "Save Event"}
@@ -144,6 +108,6 @@ export default function HomePage() {
           </>
         ) : null}
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

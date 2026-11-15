@@ -1,18 +1,32 @@
-import Link from 'next/link';
+import { formatLocation } from '@/lib/admin/map';
+import type { EventLocation } from '@/lib/admin/types';
 
-export const CurrentLocationCard = ({ backHref }: { backHref: string }) => {
+interface CurrentLocationCardProps {
+  // The point picked on the map, or null before the first tap
+  location: EventLocation | null;
+  onConfirm: (location: EventLocation) => void;
+}
+
+export const CurrentLocationCard = ({ location, onConfirm }: CurrentLocationCardProps) => {
   return (
     <div className="map-card">
       <div className="map-card__row">
         <span className="map-card__dot" />
         <div>
-          <p className="map-card__small">Current location detected</p>
-          <p className="map-card__big">Cali, Colombia</p>
+          <p className="map-card__small">
+            {location ? 'Selected location' : 'Tap the map to place the event'}
+          </p>
+          <p className="map-card__big">{location ? formatLocation(location) : 'Cali, Colombia'}</p>
         </div>
       </div>
-      <Link href={backHref} className="map-card__button">
-        Location Selected
-      </Link>
+      <button
+        type="button"
+        className="map-card__button map-card__button--action"
+        disabled={!location}
+        onClick={() => location && onConfirm(location)}
+      >
+        Use this location
+      </button>
     </div>
   );
 };

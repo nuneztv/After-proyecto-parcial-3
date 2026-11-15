@@ -6,9 +6,12 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "lint:admin": "eslint app/admin components/admin contexts/admin lib/admin hooks/admin",
+    "test": "node --import tsx --test \"test/**/*.test.ts\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "axios": "^1.20.0",
     "leaflet": "^1.9.4",
     "next": "16.4.2",
@@ -22,6 +25,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

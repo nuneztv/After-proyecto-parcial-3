@@ -1,11 +1,14 @@
-import { Router } from "express";
-import { asyncHandler } from "../../middlewares/errorsMiddleware";
+import { Router } from 'express';
+import { authMiddleware } from '../../middlewares/authMiddleware';
+import { asyncHandler } from '../../middlewares/errorsMiddleware';
 import {
   getPaymentByIdController,
   getPaymentsController,
-} from "./payment.controller";
+  reserveTicketController,
+} from './payment.controller';
 
 export const router = Router();
 
-router.get("/", asyncHandler(async (req, res) => getPaymentsController(req, res)));
-router.get("/:id", asyncHandler(async (req, res) => getPaymentByIdController(req, res)));
+router.get('/', asyncHandler(authMiddleware), asyncHandler(getPaymentsController));
+router.get('/:id', asyncHandler(authMiddleware), asyncHandler(getPaymentByIdController));
+router.post('/', asyncHandler(authMiddleware), asyncHandler(reserveTicketController));
