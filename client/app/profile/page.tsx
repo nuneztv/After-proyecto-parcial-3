@@ -9,7 +9,7 @@ import { useData } from "@/contexts/DataProvider";
 import { useState } from "react";
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, loggingOut } = useAuth();
   const { savedIds, payments } = useData();
   const myPayments = payments.filter((item) => item.clientId === user?.id);
   const router = useRouter();
@@ -89,8 +89,8 @@ export default function ProfilePage() {
           <span className="chevron">›</span>
         </button>
         {panel ? <p className="status-box">{panel}</p> : null}
-        <button className="btn logout-btn" onClick={logout}>
-          Log Out
+        <button className="btn logout-btn" onClick={() => void logout()} disabled={loggingOut}>
+          {loggingOut ? "Logging out..." : "Log Out"}
         </button>
       </AppScreen>
     </Guard>

@@ -7,7 +7,7 @@ import { AppScreen } from "@/components/AppScreen";
 import { Guard } from "@/components/Guard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { IconBack, IconCapacity, IconFilter, IconSearch } from "@/components/Icons";
-import { useData } from "@/contexts/DataProvider";
+import { useEvents } from "@/contexts/EventsProvider";
 
 const MapView = dynamic(() => import("@/components/MapView").then((mod) => mod.MapView), {
   ssr: false,
@@ -15,10 +15,10 @@ const MapView = dynamic(() => import("@/components/MapView").then((mod) => mod.M
 
 export default function MapPage() {
   const router = useRouter();
-  const { allEvents } = useData();
+  const { allEvents } = useEvents();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "live" | "open">("all");
-  const [selectedId, setSelectedId] = useState("evt-1");
+  const [selectedId, setSelectedId] = useState("");
 
   const visible = useMemo(() => {
     return allEvents.filter((item) => {

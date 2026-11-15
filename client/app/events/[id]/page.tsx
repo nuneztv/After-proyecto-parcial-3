@@ -15,30 +15,34 @@ import {
   IconStar,
 } from "@/components/Icons";
 import { useData } from "@/contexts/DataProvider";
+import { useEvents } from "@/contexts/EventsProvider";
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const { loadEventById, selectedEvent, toggleSaved, savedIds, products } = useData();
+  const { loadEventById, selectedEvent, loadingEvent, eventError } = useEvents();
+  const { toggleSaved, savedIds, products } = useData();
   const product = selectedEvent
     ? products.find((item) => item.name === selectedEvent.title)
     : null;
 
   useEffect(() => {
-    if (params.id) loadEventById(params.id);
-  }, [params.id]);
+    if (params.id) void loadEventById(params.id);
+  }, [params.id, loadEventById]);
 
   return (
     <Guard>
       <section className="screen detail">
-        {!selectedEvent ? (
+        {!selectedEvent && loadingEvent ? <p className="status-box">Loading event...</p> : null}
+        {!selectedEvent && !loadingEvent ? (
           <div className="empty">
-            <p>This event id does not exist.</p>
+            <p>{eventError || "This event id does not exist."}</p>
             <button className="btn" onClick={() => router.push("/home")}>
               Back to Home
             </button>
           </div>
-        ) : (
+        ) : null}
+        {selectedEvent ? (
           <>
             <div className="hero-photo">
               <img src={selectedEvent.imageUrl} alt={selectedEvent.title} />
@@ -107,7 +111,7 @@ export default function EventDetailPage() {
               Get Directions
             </button>
           </>
-        )}
+        ) : null}
       </section>
     </Guard>
   );

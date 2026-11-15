@@ -3,72 +3,45 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { useAxios } from "./AxiosProvider";
 import { useAuth } from "./AuthProvider";
-import { EventFilters, EventItem, Payment, Product } from "@/types/models";
-import { eventsCatalog } from "@/lib/events";
+import { useEvents } from "./EventsProvider";
+import { EventView, Payment, Product } from "@/types/models";
 import { getSavedIds, setSavedIds } from "@/lib/storage";
 
-const defaultFilters: EventFilters = {
-  search: "",
-  category: "all",
-  status: "all",
-  time: "all",
-  maxDistance: 5,
-};
-
+// Legacy provider: products, payments and saved events. Events moved to EventsProvider
 interface DataContextType {
   products: Product[];
   payments: Payment[];
   selectedProduct: Product | null;
-  allEvents: EventItem[];
-  events: EventItem[];
-  selectedEvent: EventItem | null;
-  filters: EventFilters;
   savedIds: string[];
-  savedEvents: EventItem[];
+  savedEvents: EventView[];
   loading: boolean;
   error: string;
   loadProducts: () => Promise<void>;
   loadProductById: (id: string) => Promise<Product | null>;
   loadPayments: () => Promise<void>;
-  loadEvents: (next?: Partial<EventFilters>) => void;
-  loadEventById: (id: string) => EventItem | null;
-  setFilters: (next: Partial<EventFilters>) => void;
   toggleSaved: (eventId: string) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
 
-const matches = (item: EventItem, filters: EventFilters) => {
-  const q = filters.search.trim().toLowerCase();
-  const searchOk =
-    !q ||
-    item.title.toLowerCase().includes(q) ||
-    item.venueName.toLowerCase().includes(q) ||
-    item.categories.some((category) => category.toLowerCase().includes(q));
-  const categoryOk = filters.category === "all" || item.categories.includes(filters.category);
-  const statusOk = filters.status === "all" || item.status === filters.status;
-  const distanceOk = item.distanceKm <= filters.maxDistance || filters.maxDistance >= 10;
-  return searchOk && categoryOk && statusOk && distanceOk;
-};
-
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
   const { user } = useAuth();
+  // The id, not the object: GET /api/auth/me replaces the user object without changing who it is
+  const userId = user?.id;
+  // Saved ids are still kept in localStorage; the events themselves come from the API
+  const { allEvents } = useEvents();
   const [products, setProducts] = useState<Product[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [filters, setFiltersState] = useState<EventFilters>(defaultFilters);
-  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
   const [savedIds, setSaved] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (user) setSaved(getSavedIds(user.id));
+    if (userId) setSaved(getSavedIds(userId));
     else setSaved([]);
-  }, [user]);
-
-  const events = useMemo(() => eventsCatalog.filter((item) => matches(item, filters)), [filters]);
+  }, [userId]);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -116,24 +89,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [axios]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     void loadProducts();
     void loadPayments();
-  }, [user, loadProducts, loadPayments]);
-
-  const loadEvents = (next?: Partial<EventFilters>) => {
-    if (next) setFiltersState((prev) => ({ ...prev, ...next }));
-  };
-
-  const loadEventById = (id: string) => {
-    const found = eventsCatalog.find((item) => item.id === id) || null;
-    setSelectedEvent(found);
-    return found;
-  };
-
-  const setFilters = (next: Partial<EventFilters>) => {
-    setFiltersState((prev) => ({ ...prev, ...next }));
-  };
+  }, [userId, loadProducts, loadPayments]);
 
   const toggleSaved = (eventId: string) => {
     if (!user) return;
@@ -145,7 +104,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const savedEvents = eventsCatalog.filter((item) => savedIds.includes(item.id));
+  const savedEvents = useMemo(
+    () => allEvents.filter((item) => savedIds.includes(item.id)),
+    [allEvents, savedIds]
+  );
 
   return (
     <DataContext.Provider
@@ -153,10 +115,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         products,
         payments,
         selectedProduct,
-        allEvents: eventsCatalog,
-        events,
-        selectedEvent,
-        filters,
         savedIds,
         savedEvents,
         loading,
@@ -164,9 +122,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         loadProducts,
         loadProductById,
         loadPayments,
-        loadEvents,
-        loadEventById,
-        setFilters,
         toggleSaved,
       }}
     >

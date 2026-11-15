@@ -1,34 +1,55 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { AfterLogo } from "@/components/AfterLogo";
 import { IconLock, IconMail, IconPerson } from "@/components/Icons";
+import { useAuth } from "@/contexts/AuthProvider";
+import { validateRegister } from "@/lib/validation";
 
 export default function RegisterPage() {
+  const { register, loading, error, clearError } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const onSubmit = (event: FormEvent) => {
+  const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
+  const problem = formError || error;
+
+  // An error left by the login screen does not belong to this form
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      setMessage("Please fill in all fields");
+    if (loading) return;
+
+    setNotice("");
+    const invalid = validateRegister({ fullName, email, password, confirmPassword });
+    setFormError(invalid ?? "");
+    if (invalid) {
+      clearError();
       return;
     }
-    if (password !== confirmPassword) {
-      setMessage("Passwords do not match");
-      return;
+
+    const result = await register({ fullName: fullName.trim(), email: email.trim(), password });
+    if (result === "confirm") {
+      setNotice("Check your email to confirm your account, then log in");
     }
-    setMessage("Use laura.gomez@after.app / After123!");
   };
 
   return (
     <section className="screen auth">
       <AfterLogo />
-      <form className="auth-card" onSubmit={onSubmit}>
-        {message ? <p className="status-box">{message}</p> : null}
+      <form className="auth-card" onSubmit={onSubmit} noValidate>
+        {problem ? (
+          <p className="form-error" role="alert">
+            {problem}
+          </p>
+        ) : null}
+        {notice ? <p className="status-box">{notice}</p> : null}
         <label className="field">
           <span className="icon-soft">
             <IconPerson />
@@ -80,8 +101,8 @@ export default function RegisterPage() {
             aria-label="Confirm password"
           />
         </label>
-        <button className="btn" type="submit">
-          Create Account
+        <button className="btn" type="submit" disabled={loading}>
+          {loading ? "Creating account..." : "Create Account"}
         </button>
       </form>
       <div className="divider">Or sign up with</div>

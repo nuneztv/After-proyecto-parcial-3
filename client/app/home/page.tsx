@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { AfterLogo } from "@/components/AfterLogo";
 import { IconPin, IconSearch } from "@/components/Icons";
 import { useData } from "@/contexts/DataProvider";
+import { useEvents } from "@/contexts/EventsProvider";
 
 const categories = ["all", "music", "party", "rooftop", "bar"];
 
@@ -18,14 +19,10 @@ const statusLabel = (status: string) => {
 
 export default function HomePage() {
   const router = useRouter();
-  const { events, loading, error, loadEvents, filters, toggleSaved, savedIds } = useData();
+  const { events, happening, tonight, trending, loading, error, filters, setFilters } = useEvents();
+  const { toggleSaved, savedIds } = useData();
 
   const searching = filters.search.trim().length > 0;
-  const happening = events.filter((item) => item.section === "happening");
-  const tonight = events.filter((item) => item.section === "tonight");
-  const trending =
-    events.find((item) => item.section === "trending" && item.id === "evt-5") ||
-    events.find((item) => item.section === "trending");
 
   return (
     <Guard>
@@ -41,7 +38,7 @@ export default function HomePage() {
           <IconSearch />
           <input
             value={filters.search}
-            onChange={(e) => loadEvents({ search: e.target.value, maxDistance: 10 })}
+            onChange={(e) => setFilters({ search: e.target.value, maxDistance: 10 })}
             placeholder="Search events,venus or categories ..."
             aria-label="Search events"
           />
@@ -51,7 +48,7 @@ export default function HomePage() {
             <button
               key={category}
               className={`chip ${filters.category === category ? "active" : ""}`}
-              onClick={() => loadEvents({ category, search: filters.search })}
+              onClick={() => setFilters({ category })}
             >
               {category === "all" ? "All" : category[0].toUpperCase() + category.slice(1)}
             </button>
@@ -134,7 +131,7 @@ export default function HomePage() {
             {trending ? (
               <article className="promo">
                 <button className="promo-frame" onClick={() => router.push(`/events/${trending.id}`)}>
-                  <img className="promo-art" src="/retro.png" alt="Retro Night" />
+                  <img className="promo-art" src={trending.imageUrl} alt={trending.title} />
                 </button>
                 <button className="btn small promo-save" onClick={() => toggleSaved(trending.id)}>
                   {savedIds.includes(trending.id) ? "Saved" : "Save Event"}

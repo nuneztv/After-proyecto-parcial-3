@@ -1,90 +1,174 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { isAxiosError } from "axios";
 import { useAxios } from "./AxiosProvider";
-import { ClientProfile, SessionUser } from "@/types/models";
-import { getStoredSession, setStoredSession } from "@/lib/storage";
+import { AuthResponse, RegisterInput, UserProfile } from "@/types/models";
+import { getErrorMessage } from "@/lib/errors";
+import { SESSION_CLEARED_EVENT, getStoredSession, setStoredSession } from "@/lib/storage";
 
-const DEMO_PASSWORDS: Record<string, string> = {
-  "laura.gomez@after.app": "After123!",
-  "andres.ruiz@after.app": "After123!",
-};
+// "confirm": the account was created but Supabase asks the user to confirm the email first
+export type RegisterResult = "logged-in" | "confirm" | null;
 
 interface AuthContextType {
-  user: SessionUser | null;
-  clients: ClientProfile[];
-  loading: boolean;
+  user: UserProfile | null;
+  // true once the stored session has been read and checked with GET /api/auth/me
   ready: boolean;
+  // a login or register request is in flight
+  loading: boolean;
+  // a logout request is in flight
+  loggingOut: boolean;
+  // last login/register/session problem, shown inline by the auth screens
   error: string;
+  clearError: () => void;
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  register: (input: RegisterInput) => Promise<RegisterResult>;
+  // Always ends logged out, even when the API call fails
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const LOGIN_PATH = "/login";
+const HOME_PATH = "/home";
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
   const router = useRouter();
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState("");
+  const logoutInFlight = useRef(false);
 
+  // localStorage only exists in the browser, so the session is restored after hydration. The
+  // stored profile is confirmed with the API: a 401 there goes through the refresh flow, and a
+  // failed refresh fires SESSION_CLEARED_EVENT (handled below)
   useEffect(() => {
-    const boot = async () => {
+    const stored = getStoredSession();
+
+    if (!stored) {
+      setReady(true);
+      return;
+    }
+
+    setUser(stored.user);
+    // Ignores a check that finished after unmount (Strict Mode runs this effect twice in dev)
+    let active = true;
+
+    const onInit = async () => {
       try {
-        const { data } = await axios.get<ClientProfile[]>("/api/clients");
-        setClients(data);
-        const stored = getStoredSession();
-        if (stored) {
-          const match = data.find((item) => item.id === stored.id);
-          setUser(match || stored);
+        const { data } = await axios.get<UserProfile>("/api/auth/me");
+        const current = getStoredSession();
+
+        if (active && current) {
+          setStoredSession({ ...current, user: data });
+          setUser(data);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load clients");
-        const stored = getStoredSession();
-        if (stored) setUser(stored);
+        // 401 = expired session, already handled by SESSION_CLEARED_EVENT. Any other failure
+        // (network, server) keeps the stored session so the user can keep browsing
+        if (!isAxiosError(err) || err.response?.status !== 401) {
+          console.error("Could not verify the session", err);
+        }
       } finally {
-        setReady(true);
+        if (active) setReady(true);
       }
     };
-    void boot();
+
+    void onInit();
+
+    return () => {
+      active = false;
+    };
   }, [axios]);
+
+  useEffect(() => {
+    const onCleared = () => {
+      setUser(null);
+      setError("Your session expired, please log in again");
+      router.replace(LOGIN_PATH);
+    };
+
+    window.addEventListener(SESSION_CLEARED_EVENT, onCleared);
+    return () => window.removeEventListener(SESSION_CLEARED_EVENT, onCleared);
+  }, [router]);
+
+  const clearError = useCallback(() => setError(""), []);
+
+  const startSession = useCallback((data: AuthResponse) => {
+    if (!data.session) return;
+
+    setStoredSession({ ...data.session, user: data.user });
+    setUser(data.user);
+  }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
     setError("");
+
     try {
-      const { data } = await axios.get<ClientProfile[]>("/api/clients");
-      setClients(data);
-      const found = data.find((item) => item.email.toLowerCase() === email.toLowerCase());
-      const expected = DEMO_PASSWORDS[email.toLowerCase()];
-      if (!found || !expected || expected !== password) {
-        setError("Email or password is not correct");
-        return false;
-      }
-      setStoredSession(found);
-      setUser(found);
-      router.push("/home");
+      const { data } = await axios.post<AuthResponse>("/api/auth/login", { email, password });
+      startSession(data);
+      router.replace(HOME_PATH);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(getErrorMessage(err));
       return false;
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
-    setStoredSession(null);
-    setUser(null);
-    router.push("/login");
+  const register = async (input: RegisterInput): Promise<RegisterResult> => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data } = await axios.post<AuthResponse>("/api/auth/register", input);
+
+      if (!data.session) return "confirm";
+
+      startSession(data);
+      router.replace(HOME_PATH);
+      return "logged-in";
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    // A ref, not the state: a second click in the same render must not send a second request
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
+    setLoggingOut(true);
+
+    try {
+      // Revokes this session's refresh token on the server. An /api/auth/ route, so a 401 here
+      // is never refreshed and retried by the interceptor
+      await axios.post("/api/auth/logout");
+    } catch (err) {
+      // Best-effort: an expired session or an API failure must not keep the user logged in
+      console.error("Logout request failed", err);
+    } finally {
+      setStoredSession(null);
+      setUser(null);
+      setError("");
+      logoutInFlight.current = false;
+      setLoggingOut(false);
+      router.replace(LOGIN_PATH);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, clients, loading, ready, error, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, ready, loading, loggingOut, error, clearError, login, register, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
