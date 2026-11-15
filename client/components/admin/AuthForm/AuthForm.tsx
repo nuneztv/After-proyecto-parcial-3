@@ -7,6 +7,9 @@ import { Logo } from '../Logo/Logo';
 interface AuthFormProps {
   label?: string;
   submitText: string;
+  loadingText: string;
+  loading: boolean;
+  error?: string | null;
   footerText: string;
   footerLinkText: string;
   footerHref: string;
@@ -14,9 +17,14 @@ interface AuthFormProps {
   children: ReactNode;
 }
 
+// Shell shared by the admin login and register screens. The form owns preventDefault,
+// so callers receive onSubmit() without DOM events.
 export const AuthForm = ({
   label,
   submitText,
+  loadingText,
+  loading,
+  error,
   footerText,
   footerLinkText,
   footerHref,
@@ -25,7 +33,7 @@ export const AuthForm = ({
 }: AuthFormProps) => {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    onSubmit();
+    if (!loading) onSubmit();
   };
 
   return (
@@ -33,10 +41,15 @@ export const AuthForm = ({
       <Logo />
       {label && <p className="auth__label">{label}</p>}
 
-      <form className="auth__card" onSubmit={handleSubmit}>
+      <form className="auth__card" onSubmit={handleSubmit} noValidate aria-busy={loading}>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
         {children}
-        <button type="submit" className="btn">
-          {submitText}
+        <button type="submit" className="btn" disabled={loading}>
+          {loading ? loadingText : submitText}
         </button>
       </form>
 

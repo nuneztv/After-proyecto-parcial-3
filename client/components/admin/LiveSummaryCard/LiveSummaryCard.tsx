@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { isRemoteImage } from '@/lib/admin/images';
 import type { AfterEvent } from '@/lib/admin/types';
 import { CapacityBar } from '../CapacityBar/CapacityBar';
 
@@ -8,6 +9,7 @@ export const LiveSummaryCard = ({ event }: { event: AfterEvent }) => {
       <div className="live-card__image-wrap">
         <Image
           src={event.image}
+          unoptimized={isRemoteImage(event.image)}
           alt={event.name}
           width={600}
           height={400}

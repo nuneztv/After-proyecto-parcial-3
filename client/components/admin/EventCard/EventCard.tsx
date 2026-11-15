@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { isRemoteImage } from '@/lib/admin/images';
 import type { AfterEvent } from '@/lib/admin/types';
 import { StatusBadge } from '../StatusBadge/StatusBadge';
 import { CapacityBar } from '../CapacityBar/CapacityBar';
@@ -7,13 +8,16 @@ import { CapacityBar } from '../CapacityBar/CapacityBar';
 interface EventCardProps {
   event: AfterEvent;
   liveControl?: boolean;
+  // Makes the whole card a link (e.g. to the edit form); liveControl takes precedence
+  href?: string;
 }
 
-export const EventCard = ({ event, liveControl = false }: EventCardProps) => {
+export const EventCard = ({ event, liveControl = false, href }: EventCardProps) => {
   const card = (
     <>
       <Image
         src={event.image}
+        unoptimized={isRemoteImage(event.image)}
         alt={event.name}
         width={600}
         height={300}
@@ -38,6 +42,14 @@ export const EventCard = ({ event, liveControl = false }: EventCardProps) => {
   if (liveControl) {
     return (
       <Link href={`/admin/live/${event.id}`} className="event-card">
+        {card}
+      </Link>
+    );
+  }
+
+  if (href) {
+    return (
+      <Link href={href} className="event-card">
         {card}
       </Link>
     );
