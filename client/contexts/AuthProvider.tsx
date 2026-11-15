@@ -1,12 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { isAxiosError } from "axios";
 import { useAxios } from "./AxiosProvider";
 import { AuthResponse, RegisterInput, UserProfile } from "@/types/models";
 import { getErrorMessage } from "@/lib/errors";
 import { SESSION_CLEARED_EVENT, getStoredSession, setStoredSession } from "@/lib/storage";
+import { LOGIN_PATH, NON_CLIENT_MESSAGE, buildLoginPath, canUseClientApp } from "@/lib/redirect";
 
 // "confirm": the account was created but Supabase asks the user to confirm the email first
 export type RegisterResult = "logged-in" | "confirm" | null;
@@ -19,6 +20,9 @@ interface AuthContextType {
   loading: boolean;
   // a logout request is in flight
   loggingOut: boolean;
+  // true from a voluntary logout until /login is reached: meanwhile PrivateRoute redirects to a
+  // plain /login, because leaving the app on purpose must not record a ?next= destination
+  signedOut: boolean;
   // last login/register/session problem, shown inline by the auth screens
   error: string;
   clearError: () => void;
@@ -30,9 +34,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const LOGIN_PATH = "/login";
-const HOME_PATH = "/home";
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
   const router = useRouter();
@@ -40,8 +41,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState("");
+  const pathname = usePathname();
+
+  // The logout ends when /login is reached: from then on, opening a protected page records
+  // ?next= again (e.g. a link to /events/123 opened after logging out)
+  useEffect(() => {
+    if (signedOut && pathname === LOGIN_PATH) setSignedOut(false);
+  }, [signedOut, pathname]);
   const logoutInFlight = useRef(false);
+
+  // An admin account is never kept in the user app: its Supabase session is revoked right away
+  // (best-effort) so its refresh token cannot be reused. No accessToken: the stored one is sent
+  const revokeSession = useCallback(
+    async (accessToken?: string) => {
+      try {
+        await axios.post(
+          "/api/auth/logout",
+          null,
+          accessToken ? { headers: { Authorization: `Bearer ${accessToken}` } } : undefined
+        );
+      } catch (err) {
+        console.error("Could not revoke the administrator session", err);
+      }
+    },
+    [axios]
+  );
 
   // localStorage only exists in the browser, so the session is restored after hydration. The
   // stored profile is confirmed with the API: a 401 there goes through the refresh flow, and a
@@ -54,7 +80,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    setUser(stored.user);
+    // The stored role is only a hint until GET /api/auth/me confirms it
+    setUser(canUseClientApp(stored.user) ? stored.user : null);
     // Ignores a check that finished after unmount (Strict Mode runs this effect twice in dev)
     let active = true;
 
@@ -63,7 +90,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const { data } = await axios.get<UserProfile>("/api/auth/me");
         const current = getStoredSession();
 
-        if (active && current) {
+        if (active && current && !canUseClientApp(data)) {
+          await revokeSession();
+          setStoredSession(null);
+          setUser(null);
+          setError(NON_CLIENT_MESSAGE);
+        } else if (active && current) {
           setStoredSession({ ...current, user: data });
           setUser(data);
         }
@@ -83,13 +115,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       active = false;
     };
-  }, [axios]);
+  }, [axios, revokeSession]);
 
   useEffect(() => {
     const onCleared = () => {
       setUser(null);
       setError("Your session expired, please log in again");
-      router.replace(LOGIN_PATH);
+      // Back to the same page after logging in again
+      const { pathname, search } = window.location;
+      router.replace(buildLoginPath(`${pathname}${search}`));
     };
 
     window.addEventListener(SESSION_CLEARED_EVENT, onCleared);
@@ -102,6 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!data.session) return;
 
     setStoredSession({ ...data.session, user: data.user });
+    setSignedOut(false);
     setUser(data.user);
   }, []);
 
@@ -111,8 +146,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const { data } = await axios.post<AuthResponse>("/api/auth/login", { email, password });
+
+      // POST /api/auth/login accepts any role: the user app only lets "client" accounts in
+      if (!canUseClientApp(data.user)) {
+        await revokeSession(data.session?.accessToken);
+        setError(NON_CLIENT_MESSAGE);
+        return false;
+      }
+
+      // GuestRoute (around /login) sees the new user and redirects to ?next= or /home
       startSession(data);
-      router.replace(HOME_PATH);
       return true;
     } catch (err) {
       setError(getErrorMessage(err));
@@ -131,8 +174,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (!data.session) return "confirm";
 
+      // /api/auth/register always creates "client" accounts; GuestRoute (around /register)
+      // redirects to ?next= or /home
       startSession(data);
-      router.replace(HOME_PATH);
       return "logged-in";
     } catch (err) {
       setError(getErrorMessage(err));
@@ -157,6 +201,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("Logout request failed", err);
     } finally {
       setStoredSession(null);
+      // Set together with the user so PrivateRoute never sees "no user" without it
+      setSignedOut(true);
       setUser(null);
       setError("");
       logoutInFlight.current = false;
@@ -167,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, ready, loading, loggingOut, error, clearError, login, register, logout }}
+      value={{ user, ready, loading, loggingOut, signedOut, error, clearError, login, register, logout }}
     >
       {children}
     </AuthContext.Provider>

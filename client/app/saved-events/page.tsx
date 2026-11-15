@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { StatusBadge } from "@/components/StatusBadge";
 import { IconHeart } from "@/components/Icons";
 import { useData } from "@/contexts/DataProvider";
@@ -14,7 +14,7 @@ export default function SavedEventsPage() {
   const [tab, setTab] = useState<"events" | "venues">("events");
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen>
         <h1 className="page-title" style={{ textAlign: "center" }}>
           Saved Events
@@ -67,6 +67,6 @@ export default function SavedEventsPage() {
           <p className="empty">No saved venues yet.</p>
         ) : null}
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   IconBack,
@@ -31,7 +31,7 @@ export default function EventDetailPage() {
   }, [params.id, loadEventById]);
 
   return (
-    <Guard>
+    <PrivateRoute>
       <section className="screen detail">
         {!selectedEvent && loadingEvent ? <p className="status-box">Loading event...</p> : null}
         {!selectedEvent && !loadingEvent ? (
@@ -113,6 +113,6 @@ export default function EventDetailPage() {
           </>
         ) : null}
       </section>
-    </Guard>
+    </PrivateRoute>
   );
 }

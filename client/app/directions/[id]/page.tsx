@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { IconClose, IconPin } from "@/components/Icons";
 import { walkingMinutes } from "@/lib/eventMappers";
 import { useEvents } from "@/contexts/EventsProvider";
@@ -23,7 +23,7 @@ export default function DirectionsPage() {
   }, [params.id, loadEventById]);
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen className="map-screen">
         <button className="icon-btn close-top" onClick={() => router.back()} aria-label="Close">
           <IconClose />
@@ -67,6 +67,6 @@ export default function DirectionsPage() {
           </>
         ) : null}
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

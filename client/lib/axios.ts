@@ -10,7 +10,9 @@ export const api = axios.create({ baseURL: API_URL, timeout: 12000 });
 api.interceptors.request.use((config) => {
   const session = getStoredSession();
 
-  if (session?.accessToken) {
+  // An explicit header wins: the refresh retry sets the new token, and revoking a session that
+  // was never stored (an admin account at login) sends that session's own token
+  if (session?.accessToken && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${session.accessToken}`;
   }
 

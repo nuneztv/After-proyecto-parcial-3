@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AfterLogo } from "@/components/AfterLogo";
 import { IconPin, IconSearch } from "@/components/Icons";
@@ -25,7 +25,7 @@ export default function HomePage() {
   const searching = filters.search.trim().length > 0;
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen>
         <div className="topbar">
           <AfterLogo size="sm" />
@@ -141,6 +141,6 @@ export default function HomePage() {
           </>
         ) : null}
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

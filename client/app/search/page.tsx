@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { IconClose } from "@/components/Icons";
 import { useEvents } from "@/contexts/EventsProvider";
 
@@ -23,7 +23,7 @@ export default function SearchPage() {
   const { filters, setFilters, resetFilters, events } = useEvents();
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen>
         <button className="icon-btn close-top" onClick={() => router.back()} aria-label="Close filters">
           <IconClose />
@@ -97,6 +97,6 @@ export default function SearchPage() {
         </button>
         <p className="demo-note">{events.length} events currently loaded before applying.</p>
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

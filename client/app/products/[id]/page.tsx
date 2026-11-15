@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { IconBack } from "@/components/Icons";
 import { useData } from "@/contexts/DataProvider";
 
@@ -16,7 +16,7 @@ export default function ProductDetailPage() {
   }, [params.id]);
 
   return (
-    <Guard>
+    <PrivateRoute>
       <section className="screen detail">
         {loading ? <p className="status-box">Loading product...</p> : null}
         {error ? <p className="form-error">{error}</p> : null}
@@ -51,6 +51,6 @@ export default function ProductDetailPage() {
           </>
         ) : null}
       </section>
-    </Guard>
+    </PrivateRoute>
   );
 }

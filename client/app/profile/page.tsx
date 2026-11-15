@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { IconBell, IconGear, IconHeart, IconHelp } from "@/components/Icons";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useData } from "@/contexts/DataProvider";
@@ -15,10 +15,11 @@ export default function ProfilePage() {
   const router = useRouter();
   const [panel, setPanel] = useState("");
 
-  if (!user) return null;
+  // PrivateRoute must still render without a user: it is what redirects to /login
+  if (!user) return <PrivateRoute>{null}</PrivateRoute>;
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen>
         <h1 className="page-title" style={{ textAlign: "center" }}>
           Profile
@@ -93,6 +94,6 @@ export default function ProfilePage() {
           {loggingOut ? "Logging out..." : "Log Out"}
         </button>
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }

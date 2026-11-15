@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AppScreen } from "@/components/AppScreen";
-import { Guard } from "@/components/Guard";
+import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
 import { StatusBadge } from "@/components/StatusBadge";
 import { IconBack, IconCapacity, IconFilter, IconSearch } from "@/components/Icons";
 import { useEvents } from "@/contexts/EventsProvider";
@@ -36,7 +36,7 @@ export default function MapPage() {
   const selected = visible.find((item) => item.id === selectedId) || visible[0];
 
   return (
-    <Guard>
+    <PrivateRoute>
       <AppScreen className="map-screen">
         <div className="map-search">
           <button className="icon-btn" onClick={() => router.push("/home")} aria-label="Back">
@@ -95,6 +95,6 @@ export default function MapPage() {
           <p className="empty">No events in this area.</p>
         )}
       </AppScreen>
-    </Guard>
+    </PrivateRoute>
   );
 }
