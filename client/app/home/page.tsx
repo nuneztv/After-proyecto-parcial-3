@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { StatusBadge } from "@/components/StatusBadge";
-import { AfterLogo } from "@/components/AfterLogo";
-import { IconPin, IconSearch } from "@/components/Icons";
-import { useData } from "@/contexts/DataProvider";
+import { EventCard } from "@/components/EventCard/EventCard";
+import { AfterLogo } from "@/components/AfterLogo/AfterLogo";
+import { IconPin, IconSearch } from "@/components/Icons/Icons";
+import { useSavedEvents } from "@/contexts/SavedEventsProvider";
 import { useEvents } from "@/contexts/EventsProvider";
 
 const categories = ["all", "music", "party", "rooftop", "bar"];
@@ -20,7 +20,7 @@ const statusLabel = (status: string) => {
 export default function HomePage() {
   const router = useRouter();
   const { events, happening, tonight, trending, loading, error, filters, setFilters } = useEvents();
-  const { toggleSaved, savedIds } = useData();
+  const { toggleSaved, savedIds } = useSavedEvents();
 
   const searching = filters.search.trim().length > 0;
 
@@ -39,7 +39,7 @@ export default function HomePage() {
           <input
             value={filters.search}
             onChange={(e) => setFilters({ search: e.target.value, maxDistance: 10 })}
-            placeholder="Search events,venus or categories ..."
+            placeholder="Search events, venues or categories ..."
             aria-label="Search events"
           />
         </div>
@@ -59,24 +59,7 @@ export default function HomePage() {
         {!loading && events.length === 0 ? <p className="empty">No events match this search.</p> : null}
         {searching
           ? events.map((event) => (
-              <article key={event.id} className="event-card">
-                <button className="cover" onClick={() => router.push(`/events/${event.id}`)}>
-                  <img src={event.imageUrl} alt={event.title} />
-                  <StatusBadge status={event.status} />
-                </button>
-                <div className="card-body">
-                  <h3>{event.title}</h3>
-                  <p className="muted">{event.venueName}</p>
-                  <div className="meta-row">
-                    <span className="meta-pin">
-                      <IconPin /> {event.distanceKm} km
-                    </span>
-                    <span>
-                      {event.occupied}/{event.capacity}
-                    </span>
-                  </div>
-                </div>
-              </article>
+              <EventCard key={event.id} event={event} onOpen={(id) => router.push(`/events/${id}`)} />
             ))
           : null}
         {!searching ? (
@@ -88,27 +71,10 @@ export default function HomePage() {
               </button>
             </div>
             {happening.map((event) => (
-              <article key={event.id} className="event-card">
-                <button className="cover" onClick={() => router.push(`/events/${event.id}`)}>
-                  <img src={event.imageUrl} alt={event.title} />
-                  <StatusBadge status={event.status} />
-                </button>
-                <div className="card-body">
-                  <h3>{event.title}</h3>
-                  <p className="muted">{event.venueName}</p>
-                  <div className="meta-row">
-                    <span className="meta-pin">
-                      <IconPin /> {event.distanceKm} km
-                    </span>
-                    <span>
-                      {event.occupied}/{event.capacity}
-                    </span>
-                  </div>
-                </div>
-              </article>
+              <EventCard key={event.id} event={event} onOpen={(id) => router.push(`/events/${id}`)} />
             ))}
             <div className="section-head">
-              <h2>Tonight's Pick ✨</h2>
+              <h2>Tonight&apos;s Pick ✨</h2>
             </div>
             <div className="tonight-grid">
               {tonight.slice(0, 2).map((event) => (

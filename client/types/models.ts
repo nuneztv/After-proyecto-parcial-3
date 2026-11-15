@@ -1,14 +1,28 @@
 export type EventStatus = "live" | "open" | "almost-full" | "closed";
 
+// The event nested in tickets and payments (json_build_object on the server)
+export interface EventSummary {
+  id: string;
+  title: string;
+  venueName: string;
+  address: string;
+  status: EventStatus;
+  imageUrl: string | null;
+  startsAt: string;
+  endsAt: string | null;
+}
+
+// GET /api/products: a ticket for an event. Prices are COP without decimals
 export interface Product {
   id: string;
+  eventId: string;
   name: string;
   category: string;
   price: number;
   currency: string;
   description: string;
-  imageUrl: string;
-  place: string;
+  imageUrl: string | null;
+  event: EventSummary;
 }
 
 export type Role = "client" | "admin";
@@ -41,20 +55,29 @@ export interface StoredSession extends AuthTokens {
   user: UserProfile;
 }
 
+export type OAuthProvider = "google" | "apple";
+
 export interface RegisterInput {
   fullName: string;
   email: string;
   password: string;
 }
 
+// GET /api/payments: a purchase of the current user, with its ticket and event
 export interface Payment {
   id: string;
-  clientId: string;
   productId: string;
   amount: number;
   currency: string;
   status: "paid" | "pending" | "failed";
   createdAt: string;
+  product: {
+    id: string;
+    name: string;
+    category: string;
+    imageUrl: string | null;
+    event: EventSummary;
+  };
 }
 
 export type EventSection = "happening" | "tonight" | "trending";
@@ -133,4 +156,11 @@ export interface EventFilters {
   status: string;
   time: string;
   maxDistance: number;
+}
+
+// GET /api/saved-events: a favorite of the current user, with its event nested by the server
+export interface SavedEvent {
+  eventId: string;
+  savedAt: string;
+  event: ApiEvent;
 }

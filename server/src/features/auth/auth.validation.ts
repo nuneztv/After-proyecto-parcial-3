@@ -1,5 +1,5 @@
 import Boom from '@hapi/boom';
-import { LoginDTO, RegisterDTO } from './auth.types';
+import { LoginDTO, OAUTH_PROVIDERS, OAuthProvider, OAuthSessionDTO, RegisterDTO } from './auth.types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const PASSWORD_MIN_LENGTH = 8;
@@ -49,4 +49,43 @@ export const parseRefreshBody = (body: unknown): string => {
   }
 
   return refreshToken;
+};
+
+export const parseForgotPasswordBody = (body: unknown): string => {
+  const { email } = (body ?? {}) as Record<string, unknown>;
+
+  return requireEmail(email);
+};
+
+export const parseResetPasswordBody = (body: unknown): string => {
+  const { password } = (body ?? {}) as Record<string, unknown>;
+
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) {
+    throw Boom.badRequest(`Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+  }
+
+  return password;
+};
+
+export const parseOAuthProvider = (value: unknown): OAuthProvider => {
+  if (typeof value !== 'string' || !(OAUTH_PROVIDERS as readonly string[]).includes(value)) {
+    throw Boom.badRequest('Unsupported sign-in provider');
+  }
+
+  return value as OAuthProvider;
+};
+
+export const parseOAuthSessionBody = (body: unknown): OAuthSessionDTO => {
+  const { accessToken, refreshToken, expiresAt } = (body ?? {}) as Record<string, unknown>;
+
+  if (typeof accessToken !== 'string' || !accessToken || typeof refreshToken !== 'string' || !refreshToken) {
+    throw Boom.badRequest('Sign-in tokens are required');
+  }
+
+  const expires = Number(expiresAt);
+  if (!Number.isFinite(expires) || expires <= 0) {
+    throw Boom.badRequest('Invalid session expiry');
+  }
+
+  return { accessToken, refreshToken, expiresAt: expires };
 };

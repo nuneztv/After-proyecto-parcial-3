@@ -64,7 +64,7 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
   // The id, not the object: GET /api/auth/me replaces the user object without changing who it is
   const userId = user?.id;
   const [allEvents, setAllEvents] = useState<EventView[]>([]);
-  // Result of GET /api/events with the server-side filters; null = no server filter applied
+  // Last result of GET /api/events with server-side filters (kept while the next one loads)
   const [serverMatches, setServerMatches] = useState<EventView[] | null>(null);
   const [filters, setFiltersState] = useState<EventFilters>(DEFAULT_FILTERS);
   const [loadingList, setLoadingList] = useState(false);
@@ -111,6 +111,9 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!userId) return;
+    // The fetch is the external system this effect syncs with: the list only changes once the
+    // API answers (the loading flag is the only synchronous update)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reloadEvents();
   }, [userId, reloadEvents]);
 
@@ -119,6 +122,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     [filters],
   );
   const serverQueryKey = JSON.stringify(serverQuery);
+  // null: a category the API does not know, so nothing can match. {}: no server-side filter
+  const hasServerQuery = serverQuery !== null && Object.keys(serverQuery).length > 0;
 
   // search/category/status are filtered by the API; time and distance on the client below
   useEffect(() => {
@@ -129,12 +134,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     const silent = lastQueryKey.current === serverQueryKey;
     lastQueryKey.current = serverQueryKey;
 
-    if (query === null || Object.keys(query).length === 0) {
-      // No request: a pending one (if any) is now outdated
-      setFiltering(false);
-      setServerMatches(query === null ? [] : null);
-      return;
-    }
+    // No request (the list is derived below); a pending one, if any, is now outdated
+    if (query === null || Object.keys(query).length === 0) return;
 
     const timer = window.setTimeout(async () => {
       if (!silent) setFiltering(true);
@@ -156,13 +157,12 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     // liveVersion is a trigger only: a Realtime signal re-runs the current query
   }, [axios, userId, serverQueryKey, liveVersion]);
 
-  const events = useMemo(
-    () =>
-      (serverMatches ?? allEvents).filter(
-        (event) => matchesTime(event, filters.time) && matchesDistance(event, filters.maxDistance),
-      ),
-    [serverMatches, allEvents, filters.time, filters.maxDistance],
-  );
+  const events = useMemo(() => {
+    const base = serverQuery === null ? [] : hasServerQuery ? (serverMatches ?? allEvents) : allEvents;
+    return base.filter(
+      (event) => matchesTime(event, filters.time) && matchesDistance(event, filters.maxDistance),
+    );
+  }, [serverQuery, hasServerQuery, serverMatches, allEvents, filters.time, filters.maxDistance]);
 
   const happening = useMemo(() => events.filter((event) => event.section === 'happening'), [events]);
   const tonight = useMemo(() => events.filter((event) => event.section === 'tonight'), [events]);
@@ -258,7 +258,8 @@ export const EventsProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [userId, refreshEvent, fetchAllEvents]);
 
-  const loading = loadingList || filtering;
+  // A filter request that was overtaken by clearing the filter no longer counts as loading
+  const loading = loadingList || (hasServerQuery && filtering);
 
   const value = useMemo(
     () => ({

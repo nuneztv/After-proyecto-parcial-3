@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge } from "@/components/StatusBadge/StatusBadge";
 import {
   IconBack,
   IconCalendar,
@@ -13,18 +13,28 @@ import {
   IconPin,
   IconShare,
   IconStar,
-} from "@/components/Icons";
-import { useData } from "@/contexts/DataProvider";
+} from "@/components/Icons/Icons";
+import { useProducts } from "@/contexts/ProductsProvider";
+import { useSavedEvents } from "@/contexts/SavedEventsProvider";
 import { useEvents } from "@/contexts/EventsProvider";
+import { useToast } from "@/contexts/ToastProvider";
+import { shareEvent } from "@/lib/share";
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { loadEventById, selectedEvent, loadingEvent, eventError } = useEvents();
-  const { toggleSaved, savedIds, products } = useData();
-  const product = selectedEvent
-    ? products.find((item) => item.name === selectedEvent.title)
-    : null;
+  const { getTicketForEvent } = useProducts();
+  const { toggleSaved, savedIds } = useSavedEvents();
+  const { showToast } = useToast();
+
+  const onShare = async () => {
+    if (!selectedEvent) return;
+    const result = await shareEvent(selectedEvent, window.location.href);
+    if (result === "copied") showToast("Event link copied", "success");
+    if (result === "failed") showToast("Could not share this event", "error");
+  };
+  const product = selectedEvent ? getTicketForEvent(selectedEvent.id) : null;
 
   useEffect(() => {
     if (params.id) void loadEventById(params.id);
@@ -51,7 +61,7 @@ export default function EventDetailPage() {
                   <IconBack />
                 </button>
                 <div className="round-row">
-                  <button className="round" aria-label="Share" type="button">
+                  <button className="round" aria-label="Share" type="button" onClick={() => void onShare()}>
                     <IconShare />
                   </button>
                   <button
@@ -100,7 +110,16 @@ export default function EventDetailPage() {
               </strong>
             </div>
             {product ? (
-              <div className="info-card capacity-row">
+              <div
+                className="info-card capacity-row"
+                role="link"
+                tabIndex={0}
+                aria-label={`Ticket for ${selectedEvent.title}: ${product.price} ${product.currency}`}
+                onClick={() => router.push(`/products/${product.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") router.push(`/products/${product.id}`);
+                }}
+              >
                 <span>Ticket</span>
                 <strong>
                   {product.price} {product.currency}

@@ -1054,3 +1054,43 @@ button {
     max-height: 844px;
   }
 }
+
+/* Toasts (contexts/ToastProvider.tsx): confirmations and API errors, above the bottom nav */
+.toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  width: min(340px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(27, 18, 40, 0.16);
+  cursor: pointer;
+}
+
+.toast.success {
+  background: #e8fff4;
+  color: #146047;
+}
+
+.toast.error {
+  background: #ffe8e4;
+  color: #9a2b1d;
+}
+
+.toast.info {
+  background: #fff;
+  color: #6d5b7c;
+}

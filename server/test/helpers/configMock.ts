@@ -9,6 +9,7 @@ export const testConfig = {
   PORT: 4000,
   NODE_ENV: 'test',
   CLIENT_ORIGIN: '*',
+  CLIENT_URL: 'http://localhost:3001',
   DB_HOST: '',
   DB_PORT: 6543,
   DB_NAME: 'postgres',

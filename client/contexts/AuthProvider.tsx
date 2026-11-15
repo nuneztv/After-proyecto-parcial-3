@@ -4,10 +4,22 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, Re
 import { usePathname, useRouter } from "next/navigation";
 import { isAxiosError } from "axios";
 import { useAxios } from "./AxiosProvider";
-import { AuthResponse, RegisterInput, UserProfile } from "@/types/models";
+import { useToast } from "./ToastProvider";
+import { AuthResponse, AuthTokens, OAuthProvider, RegisterInput, UserProfile } from "@/types/models";
 import { getErrorMessage } from "@/lib/errors";
-import { SESSION_CLEARED_EVENT, getStoredSession, setStoredSession } from "@/lib/storage";
-import { LOGIN_PATH, NON_CLIENT_MESSAGE, buildLoginPath, canUseClientApp } from "@/lib/redirect";
+import {
+  SESSION_CLEARED_EVENT,
+  getStoredSession,
+  setOAuthNext,
+  setStoredSession,
+} from "@/lib/storage";
+import {
+  LOGIN_PATH,
+  NON_CLIENT_MESSAGE,
+  buildLoginPath,
+  canUseClientApp,
+  getNextFromSearch,
+} from "@/lib/redirect";
 
 // "confirm": the account was created but Supabase asks the user to confirm the email first
 export type RegisterResult = "logged-in" | "confirm" | null;
@@ -20,16 +32,26 @@ interface AuthContextType {
   loading: boolean;
   // a logout request is in flight
   loggingOut: boolean;
-  // true from a voluntary logout until /login is reached: meanwhile PrivateRoute redirects to a
+  // true while still on the page left by a voluntary logout: PrivateRoute then redirects to a
   // plain /login, because leaving the app on purpose must not record a ?next= destination
   signedOut: boolean;
   // last login/register/session problem, shown inline by the auth screens
   error: string;
   clearError: () => void;
+  // Shows a fixed message on the auth screens (e.g. a cancelled Google/Apple sign-in)
+  showAuthError: (message: string) => void;
   login: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterInput) => Promise<RegisterResult>;
   // Always ends logged out, even when the API call fails
   logout: () => Promise<void>;
+  // Sends the reset email; true when the request was accepted
+  requestPasswordReset: (email: string) => Promise<boolean>;
+  // Sets a new password with the recovery token from the reset email link
+  resetPassword: (recoveryToken: string, password: string) => Promise<boolean>;
+  // Leaves the app for Google/Apple; on failure the reason is set in 'error'
+  startOAuth: (provider: OAuthProvider) => Promise<void>;
+  // Turns the tokens of /auth/callback into a session; true for a "client" account
+  completeOAuth: (tokens: AuthTokens) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -37,19 +59,19 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const axios = useAxios();
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [signedOut, setSignedOut] = useState(false);
+  // Page the user was on when they logged out on purpose (null: no voluntary logout pending)
+  const [signedOutFrom, setSignedOutFrom] = useState<string | null>(null);
   const [error, setError] = useState("");
   const pathname = usePathname();
 
-  // The logout ends when /login is reached: from then on, opening a protected page records
-  // ?next= again (e.g. a link to /events/123 opened after logging out)
-  useEffect(() => {
-    if (signedOut && pathname === LOGIN_PATH) setSignedOut(false);
-  }, [signedOut, pathname]);
+  // Only while still on the page being left: once the user reaches /login (or opens another
+  // protected page, e.g. a link to /events/123), PrivateRoute records ?next= again
+  const signedOut = signedOutFrom !== null && signedOutFrom === pathname;
   const logoutInFlight = useRef(false);
 
   // An admin account is never kept in the user app: its Supabase session is revoked right away
@@ -76,6 +98,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const stored = getStoredSession();
 
     if (!stored) {
+      // localStorage is the external system read here, and only after hydration (reading it
+      // during render would make the first client render differ from the server HTML)
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setReady(true);
       return;
     }
@@ -131,12 +156,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [router]);
 
   const clearError = useCallback(() => setError(""), []);
+  const showAuthError = useCallback((message: string) => setError(message), []);
 
   const startSession = useCallback((data: AuthResponse) => {
     if (!data.session) return;
 
     setStoredSession({ ...data.session, user: data.user });
-    setSignedOut(false);
+    setSignedOutFrom(null);
     setUser(data.user);
   }, []);
 
@@ -186,6 +212,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const requestPasswordReset = async (email: string) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      await axios.post("/api/auth/forgot-password", { email });
+      return true;
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPassword = async (recoveryToken: string, password: string) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      // The recovery session is not stored: it only authorizes this one request (and the server
+      // ends it afterwards), so the user logs in again with the new password
+      await axios.post(
+        "/api/auth/reset-password",
+        { password },
+        { headers: { Authorization: `Bearer ${recoveryToken}` } }
+      );
+      return true;
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startOAuth = async (provider: OAuthProvider) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data } = await axios.get<{ url: string }>(`/api/auth/oauth/${provider}`);
+      setOAuthNext(getNextFromSearch(window.location.search));
+      // Full navigation to the provider: the page unloads, so loading stays on
+      window.location.assign(data.url);
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setLoading(false);
+    }
+  };
+
+  const completeOAuth = async (tokens: AuthTokens) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const { data } = await axios.post<AuthResponse>("/api/auth/oauth/session", tokens);
+
+      // Same rule as the email login: only "client" accounts use this app
+      if (!canUseClientApp(data.user)) {
+        await revokeSession(tokens.accessToken);
+        setError(NON_CLIENT_MESSAGE);
+        return false;
+      }
+
+      startSession(data);
+      return true;
+    } catch (err) {
+      setError(getErrorMessage(err));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = async () => {
     // A ref, not the state: a second click in the same render must not send a second request
     if (logoutInFlight.current) return;
@@ -202,18 +303,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setStoredSession(null);
       // Set together with the user so PrivateRoute never sees "no user" without it
-      setSignedOut(true);
+      setSignedOutFrom(window.location.pathname);
       setUser(null);
       setError("");
       logoutInFlight.current = false;
       setLoggingOut(false);
+      showToast("You have logged out", "info");
       router.replace(LOGIN_PATH);
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, ready, loading, loggingOut, signedOut, error, clearError, login, register, logout }}
+      value={{
+        user,
+        ready,
+        loading,
+        loggingOut,
+        signedOut,
+        error,
+        clearError,
+        showAuthError,
+        login,
+        register,
+        logout,
+        requestPasswordReset,
+        resetPassword,
+        startOAuth,
+        completeOAuth,
+      }}
     >
       {children}
     </AuthContext.Provider>

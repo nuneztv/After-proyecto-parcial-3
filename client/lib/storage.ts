@@ -2,7 +2,6 @@ import { AuthTokens, StoredSession } from "@/types/models";
 
 // The admin app uses its own key ("after-admin-session"): both apps can be logged in at once
 const SESSION_KEY = "after-session";
-const SAVED_KEY = "after-saved";
 
 // Fired when the session is cleared because it expired (the refresh failed)
 export const SESSION_CLEARED_EVENT = "after:session-cleared";
@@ -45,6 +44,23 @@ export const updateStoredTokens = (tokens: AuthTokens): void => {
   if (current) setStoredSession({ ...current, ...tokens });
 };
 
+// Where to go after a Google/Apple sign-in: the ?next= of the login page survives the trip to the
+// provider in sessionStorage (this tab only)
+const OAUTH_NEXT_KEY = "after-oauth-next";
+
+export const setOAuthNext = (next: string): void => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(OAUTH_NEXT_KEY, next);
+};
+
+// Read once: the value is removed so an old destination never leaks into a later sign-in
+export const takeOAuthNext = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const next = window.sessionStorage.getItem(OAUTH_NEXT_KEY);
+  window.sessionStorage.removeItem(OAUTH_NEXT_KEY);
+  return next;
+};
+
 export const expireStoredSession = (): void => {
   setStoredSession(null);
   if (typeof window !== "undefined") {
@@ -52,18 +68,3 @@ export const expireStoredSession = (): void => {
   }
 };
 
-export const getSavedIds = (userId: string): string[] => {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(`${SAVED_KEY}-${userId}`);
-  if (!raw) return userId === "cli-1" ? ["evt-1", "evt-4", "evt-5"] : [];
-  try {
-    return JSON.parse(raw) as string[];
-  } catch {
-    return [];
-  }
-};
-
-export const setSavedIds = (userId: string, ids: string[]) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(`${SAVED_KEY}-${userId}`, JSON.stringify(ids));
-};

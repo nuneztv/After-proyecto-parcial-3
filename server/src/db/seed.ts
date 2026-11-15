@@ -52,4 +52,24 @@ export const seedDb = async (db: Pool): Promise<void> => {
     JOIN public.events e ON e.id = v.event_id::uuid
     ON CONFLICT (id) DO NOTHING;
   `);
+
+  // The four tickets of the legacy products mock (prod-1..prod-4), now linked by event_id
+  // instead of by name. Night Talk's Sessions had no ticket. The JOIN skips a ticket whose
+  // event was deleted
+  await db.query(`
+    INSERT INTO public.products (id, event_id, name, category, price, currency, description, image_url)
+    SELECT v.id::uuid, e.id, v.name, 'ticket', v.price, 'COP', v.description, v.image_url
+    FROM (VALUES
+      ('b0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001',
+        'Rooftop Sessions', 45000, 'Sunset rooftop party in Cali.', '/images/events/rooftop-sessions.jpg'),
+      ('b0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003',
+        'Jazz & Wine', 38000, 'Live jazz and wine night.', '/images/events/jazz-wine.jpg'),
+      ('b0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000004',
+        'Indie Vibes', 32000, 'Independent bands and lights.', '/images/events/indie-vibes.jpg'),
+      ('b0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000005',
+        'Retro Night', 50000, 'Disco night with resident DJs.', '/retro.png')
+    ) AS v(id, event_id, name, price, description, image_url)
+    JOIN public.events e ON e.id = v.event_id::uuid
+    ON CONFLICT (id) DO NOTHING;
+  `);
 };

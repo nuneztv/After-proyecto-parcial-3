@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { StatusBadge } from "@/components/StatusBadge";
-import { IconHeart } from "@/components/Icons";
-import { useData } from "@/contexts/DataProvider";
+import { StatusBadge } from "@/components/StatusBadge/StatusBadge";
+import { IconHeart } from "@/components/Icons/Icons";
+import { useSavedEvents } from "@/contexts/SavedEventsProvider";
 
 export default function SavedEventsPage() {
   const router = useRouter();
-  const { savedEvents, savedIds, toggleSaved } = useData();
+  const { savedEvents, savedVenues, savedIds, toggleSaved, loading, error, pendingIds } =
+    useSavedEvents();
   const [tab, setTab] = useState<"events" | "venues">("events");
 
   return (
@@ -27,7 +28,13 @@ export default function SavedEventsPage() {
             Venues
           </button>
         </div>
-        {tab === "events" && savedEvents.length === 0 ? (
+        {loading ? <p className="status-box">Loading saved events...</p> : null}
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {!loading && tab === "events" && savedEvents.length === 0 ? (
           <p className="empty">You have no saved events yet. Save one from Home or Event Detail.</p>
         ) : null}
         {tab === "events"
@@ -46,14 +53,19 @@ export default function SavedEventsPage() {
                   <strong>{event.title}</strong>
                   <p className="muted">{event.venueName}</p>
                 </button>
-                <button className="heart" onClick={() => toggleSaved(event.id)} aria-label="Remove from saved">
+                <button
+                  className="heart"
+                  onClick={() => void toggleSaved(event.id)}
+                  disabled={pendingIds.includes(event.id)}
+                  aria-label="Remove from saved"
+                >
                   <IconHeart active={savedIds.includes(event.id)} />
                 </button>
               </article>
             ))
           : null}
         {tab === "venues"
-          ? savedEvents.map((event) => (
+          ? savedVenues.map((event) => (
               <article key={event.venueName} className="saved-card">
                 <img src={event.imageUrl} alt={event.venueName} />
                 <div>
@@ -63,7 +75,7 @@ export default function SavedEventsPage() {
               </article>
             ))
           : null}
-        {tab === "venues" && savedEvents.length === 0 ? (
+        {!loading && tab === "venues" && savedVenues.length === 0 ? (
           <p className="empty">No saved venues yet.</p>
         ) : null}
       </AppScreen>

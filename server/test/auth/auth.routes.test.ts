@@ -73,8 +73,17 @@ test('GET /api/auth/me answers 401 without a token', async () => {
   assert.equal(res.status, 401);
 });
 
-test('GET /api/products keeps working without Supabase', async () => {
-  const res = await request(app).get('/api/products');
+// Products are no longer a public mock (they need a token and the database): the app itself
+// must still answer without Supabase configured
+test('GET / keeps working without Supabase', async () => {
+  const res = await request(app).get('/');
 
   assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { name: 'After API' });
+});
+
+test('GET /api/products answers 401 without a token', async () => {
+  const res = await request(app).get('/api/products');
+
+  assert.equal(res.status, 401);
 });

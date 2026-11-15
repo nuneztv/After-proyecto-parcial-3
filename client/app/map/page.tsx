@@ -3,13 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { StatusBadge } from "@/components/StatusBadge";
-import { IconBack, IconCapacity, IconFilter, IconSearch } from "@/components/Icons";
+import { StatusBadge } from "@/components/StatusBadge/StatusBadge";
+import { IconBack, IconCapacity, IconFilter, IconSearch } from "@/components/Icons/Icons";
 import { useEvents } from "@/contexts/EventsProvider";
+import { filterMapEvents } from "@/lib/eventMappers";
 
-const MapView = dynamic(() => import("@/components/MapView").then((mod) => mod.MapView), {
+const MapView = dynamic(() => import("@/components/MapView/MapView").then((mod) => mod.MapView), {
   ssr: false,
 });
 
@@ -20,18 +21,7 @@ export default function MapPage() {
   const [status, setStatus] = useState<"all" | "live" | "open">("all");
   const [selectedId, setSelectedId] = useState("");
 
-  const visible = useMemo(() => {
-    return allEvents.filter((item) => {
-      const q = query.toLowerCase();
-      const matchesQuery =
-        !q ||
-        item.title.toLowerCase().includes(q) ||
-        item.venueName.toLowerCase().includes(q) ||
-        item.mapLabel.toLowerCase().includes(q);
-      const matchesStatus = status === "all" || item.status === status;
-      return matchesQuery && matchesStatus;
-    });
-  }, [allEvents, query, status]);
+  const visible = useMemo(() => filterMapEvents(allEvents, query, status), [allEvents, query, status]);
 
   const selected = visible.find((item) => item.id === selectedId) || visible[0];
 

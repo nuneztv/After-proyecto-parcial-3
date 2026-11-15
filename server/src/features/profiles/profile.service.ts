@@ -54,6 +54,26 @@ export const getProfileByIdService = async (id: string): Promise<Profile> => {
   return profile;
 };
 
+// Returns the profile, creating it on first use (accounts created by Google/Apple sign-in never
+// went through POST /api/auth/register). Two concurrent first sign-ins race on the primary key:
+// the loser re-reads the row the winner inserted
+export const ensureProfileService = async (input: {
+  id: string;
+  email: string;
+  fullName: string;
+}): Promise<Profile> => {
+  const existing = await findProfileByIdRepository(input.id);
+  if (existing) return existing;
+
+  try {
+    return await createProfileService({ ...input, role: 'client' });
+  } catch (error) {
+    const created = await findProfileByIdRepository(input.id);
+    if (created) return created;
+    throw error;
+  }
+};
+
 // Users without a profile row (created outside our API) are treated as clients
 export const getProfileRoleService = async (id: string): Promise<Role> =>
   (await findProfileRoleRepository(id)) ?? 'client';

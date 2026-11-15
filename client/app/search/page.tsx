@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { IconClose } from "@/components/Icons";
+import { IconClose } from "@/components/Icons/Icons";
 import { useEvents } from "@/contexts/EventsProvider";
 
 const categories = ["all", "concert", "party", "rooftop", "bar", "popup"];
@@ -20,7 +20,7 @@ const label = (value: string) => {
 
 export default function SearchPage() {
   const router = useRouter();
-  const { filters, setFilters, resetFilters, events } = useEvents();
+  const { filters, setFilters, resetFilters, events, loading } = useEvents();
 
   return (
     <PrivateRoute>
@@ -28,7 +28,7 @@ export default function SearchPage() {
         <button className="icon-btn close-top" onClick={() => router.back()} aria-label="Close filters">
           <IconClose />
         </button>
-        <h1 className="page-title center-title">Search y Filter</h1>
+        <h1 className="page-title center-title">Search &amp; Filter</h1>
         <h3 className="filter-title">Categories</h3>
         <div className="chips wrap">
           {categories.map((item) => (
@@ -95,7 +95,9 @@ export default function SearchPage() {
         >
           Clear filters
         </button>
-        <p className="demo-note">{events.length} events currently loaded before applying.</p>
+        <p className="demo-note" aria-live="polite">
+          {loading ? "Updating results..." : `${events.length} events match these filters.`}
+        </p>
       </AppScreen>
     </PrivateRoute>
   );

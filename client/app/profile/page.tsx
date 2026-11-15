@@ -1,17 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { IconBell, IconGear, IconHeart, IconHelp } from "@/components/Icons";
+import { IconBell, IconGear, IconHeart, IconHelp } from "@/components/Icons/Icons";
 import { useAuth } from "@/contexts/AuthProvider";
-import { useData } from "@/contexts/DataProvider";
+import { usePayments } from "@/contexts/PaymentsProvider";
+import { useSavedEvents } from "@/contexts/SavedEventsProvider";
 import { useState } from "react";
 
 export default function ProfilePage() {
   const { user, logout, loggingOut } = useAuth();
-  const { savedIds, payments } = useData();
-  const myPayments = payments.filter((item) => item.clientId === user?.id);
+  const { visitedCount } = usePayments();
+  const { savedIds } = useSavedEvents();
   const router = useRouter();
   const [panel, setPanel] = useState("");
 
@@ -41,7 +42,7 @@ export default function ProfilePage() {
             Saved
           </div>
           <div>
-            <strong>{myPayments.length}</strong>
+            <strong>{visitedCount}</strong>
             Visited
           </div>
           <div>

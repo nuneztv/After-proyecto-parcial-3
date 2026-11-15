@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { AfterLogo } from "@/components/AfterLogo";
-import { IconLock, IconMail, IconPerson } from "@/components/Icons";
+import { AfterLogo } from "@/components/AfterLogo/AfterLogo";
+import { SocialButtons } from "@/components/SocialButtons/SocialButtons";
+import { IconLock, IconMail, IconPerson } from "@/components/Icons/Icons";
 import { useAuth } from "@/contexts/AuthProvider";
 import { validateRegister } from "@/lib/validation";
 
@@ -106,14 +107,7 @@ export default function RegisterPage() {
         </button>
       </form>
       <div className="divider">Or sign up with</div>
-      <div className="social-row">
-        <button className="social" type="button">
-          Google
-        </button>
-        <button className="social" type="button">
-          Apple
-        </button>
-      </div>
+      <SocialButtons />
       <Link className="auth-link" href="/login">
         Already have an account? Log in
       </Link>

@@ -11,7 +11,7 @@ export const canUseClientApp = (user: Pick<UserProfile, 'role'> | null | undefin
 
 // Pages that must never be a post-login destination: going back to them would loop, and the
 // admin app has its own login
-const BLOCKED_PREFIXES = ['/login', '/register', '/forgot-password', '/admin'];
+const BLOCKED_PREFIXES = ['/login', '/register', '/forgot-password', '/reset-password', '/auth', '/admin'];
 const MAX_NEXT_LENGTH = 512;
 const BASE = 'http://after.local';
 
@@ -24,7 +24,6 @@ const isBlocked = (pathname: string): boolean =>
 // auth pages, so the redirect can neither leave the app nor bounce back to /login
 export const getSafeNextPath = (raw: string | null | undefined): string => {
   if (!raw || raw.length > MAX_NEXT_LENGTH) return HOME_PATH;
-  // eslint-disable-next-line no-control-regex
   if (!raw.startsWith('/') || raw.startsWith('//') || /[\\\u0000-\u001f]/.test(raw)) {
     return HOME_PATH;
   }

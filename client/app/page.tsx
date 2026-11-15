@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { AfterLogo } from "@/components/AfterLogo";
+import { AfterLogo } from "@/components/AfterLogo/AfterLogo";
 import { useAuth } from "@/contexts/AuthProvider";
 
 export default function LoadingPage() {

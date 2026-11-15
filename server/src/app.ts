@@ -10,6 +10,7 @@ import { router as productsRouter } from './features/products/product.router';
 import { router as clientsRouter } from './features/clients/client.router';
 import { router as paymentsRouter } from './features/payments/payment.router';
 import { router as uploadsRouter } from './features/uploads/upload.router';
+import { router as savedEventsRouter } from './features/saved-events/savedEvent.router';
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/uploads', uploadsRouter);
+app.use('/api/saved-events', savedEventsRouter);
 
 app.use(errorsMiddleware);
 

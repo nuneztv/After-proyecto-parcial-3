@@ -28,3 +28,9 @@ export interface LoginDTO {
 export interface AuthOptions {
   role: Role;
 }
+
+export const OAUTH_PROVIDERS = ['google', 'apple'] as const;
+export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+
+// The tokens Supabase puts in the /auth/callback URL after a Google/Apple sign-in
+export type OAuthSessionDTO = Session;

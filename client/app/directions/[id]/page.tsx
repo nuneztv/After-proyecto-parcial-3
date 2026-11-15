@@ -3,13 +3,14 @@
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { AppScreen } from "@/components/AppScreen";
+import { AppScreen } from "@/components/AppScreen/AppScreen";
 import { PrivateRoute } from "@/components/PrivateRoute/PrivateRoute";
-import { IconClose, IconPin } from "@/components/Icons";
+import { IconClose, IconPin } from "@/components/Icons/Icons";
 import { walkingMinutes } from "@/lib/eventMappers";
+import { walkingDirectionsUrl } from "@/lib/share";
 import { useEvents } from "@/contexts/EventsProvider";
 
-const MapView = dynamic(() => import("@/components/MapView").then((mod) => mod.MapView), {
+const MapView = dynamic(() => import("@/components/MapView/MapView").then((mod) => mod.MapView), {
   ssr: false,
 });
 
@@ -43,7 +44,11 @@ export default function DirectionsPage() {
                 </div>
                 <strong>{selectedEvent.venueName}</strong>
               </div>
-              <MapView events={[selectedEvent]} selectedId={selectedEvent.id} />
+              <MapView
+                events={[selectedEvent]}
+                selectedId={selectedEvent.id}
+                center={[selectedEvent.latitude, selectedEvent.longitude]}
+              />
             </div>
             <div
               className="map-sheet"
@@ -53,7 +58,11 @@ export default function DirectionsPage() {
               <div>
                 <strong>{selectedEvent.venueName}</strong>
                 <p className="muted">{selectedEvent.distanceKm} Km · {walkingMinutes(selectedEvent.distanceKm)} min away</p>
-                <button className="btn small" type="button">
+                <button
+                  className="btn small"
+                  type="button"
+                  onClick={() => window.open(walkingDirectionsUrl(selectedEvent), "_blank", "noopener,noreferrer")}
+                >
                   Start Walking
                 </button>
               </div>

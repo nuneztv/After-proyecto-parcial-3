@@ -1,11 +1,9 @@
-import { Router } from "express";
-import { asyncHandler } from "../../middlewares/errorsMiddleware";
-import {
-  getProductByIdController,
-  getProductsController,
-} from "./product.controller";
+import { Router } from 'express';
+import { authMiddleware } from '../../middlewares/authMiddleware';
+import { asyncHandler } from '../../middlewares/errorsMiddleware';
+import { getProductByIdController, getProductsController } from './product.controller';
 
 export const router = Router();
 
-router.get("/", asyncHandler(async (req, res) => getProductsController(req, res)));
-router.get("/:id", asyncHandler(async (req, res) => getProductByIdController(req, res)));
+router.get('/', asyncHandler(authMiddleware), asyncHandler(getProductsController));
+router.get('/:id', asyncHandler(authMiddleware), asyncHandler(getProductByIdController));

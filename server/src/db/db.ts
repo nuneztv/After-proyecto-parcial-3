@@ -71,9 +71,53 @@ export const initDb = async (): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_event_activity_event_created ON public.event_activity(event_id, created_at DESC);',
   );
 
+  // One row per (user, event): the composite primary key makes saving the same event twice a no-op
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.saved_events (
+      user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+      event_id UUID REFERENCES public.events(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, event_id)
+    );
+  `);
+
+  // Tickets: each one belongs to an event (replaces the old match by event title)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.products (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      event_id UUID NOT NULL REFERENCES public.events(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'ticket',
+      price INT NOT NULL CHECK (price >= 0),
+      currency TEXT NOT NULL DEFAULT 'COP',
+      description TEXT NOT NULL DEFAULT '',
+      image_url TEXT
+    );
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_products_event ON public.products(event_id);');
+
+  // A user's purchases. Amounts are COP without decimals; no payment gateway writes here yet
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+      amount INT NOT NULL CHECK (amount >= 0),
+      currency TEXT NOT NULL DEFAULT 'COP',
+      status TEXT NOT NULL CHECK (status IN ('paid', 'pending', 'failed')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_payments_user_created ON public.payments(user_id, created_at DESC);',
+  );
+
   // Same as profiles: only the server (postgres role) reads these tables
   await pool.query('ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;');
   await pool.query('ALTER TABLE public.event_activity ENABLE ROW LEVEL SECURITY;');
+  await pool.query('ALTER TABLE public.saved_events ENABLE ROW LEVEL SECURITY;');
+  await pool.query('ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;');
+  await pool.query('ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;');
 
   await seedDb(pool);
 };

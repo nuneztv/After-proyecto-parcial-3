@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { IconHeart, IconHome, IconMap, IconUser } from "./Icons";
+import { IconHeart, IconHome, IconMap, IconUser } from "@/components/Icons/Icons";
 
 const items = [
   { href: "/home", label: "Home", key: "home" },

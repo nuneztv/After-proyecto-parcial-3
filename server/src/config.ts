@@ -5,6 +5,9 @@ dotenv.config();
 export const PORT = Number(process.env.PORT) || 4000;
 export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
+// Public URL of the user app: Supabase sends users back here after a password-reset email
+// (/reset-password) or a Google/Apple sign-in (/auth/callback)
+export const CLIENT_URL = (process.env.CLIENT_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
 // Supabase Postgres (connection pooler)
 export const DB_HOST = process.env.DB_HOST || '';

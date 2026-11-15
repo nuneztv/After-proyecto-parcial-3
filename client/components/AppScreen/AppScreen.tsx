@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { BottomNav } from "./BottomNav";
+import { BottomNav } from "@/components/BottomNav/BottomNav";
 
 export const AppScreen = ({
   children,

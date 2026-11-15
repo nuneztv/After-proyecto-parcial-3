@@ -151,3 +151,20 @@ export const toServerQuery = (
   if (filters.status !== 'all') query.status = filters.status;
   return query;
 };
+
+// Map screen search + LIVE/OPEN chips
+export const filterMapEvents = (
+  events: EventView[],
+  query: string,
+  status: 'all' | 'live' | 'open',
+): EventView[] => {
+  const q = query.trim().toLowerCase();
+  return events.filter((item) => {
+    const matchesQuery =
+      !q ||
+      item.title.toLowerCase().includes(q) ||
+      item.venueName.toLowerCase().includes(q) ||
+      item.mapLabel.toLowerCase().includes(q);
+    return matchesQuery && (status === 'all' || item.status === status);
+  });
+};

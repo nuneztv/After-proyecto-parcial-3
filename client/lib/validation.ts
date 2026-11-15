@@ -21,6 +21,25 @@ export const validateLogin = ({ email, password }: LoginInput): string | null =>
   return null;
 };
 
+export interface NewPasswordInput {
+  password: string;
+  confirmPassword: string;
+}
+
+export const validateNewPassword = ({ password, confirmPassword }: NewPasswordInput): string | null => {
+  if (!password || !confirmPassword) return 'Please fill in both fields';
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters`;
+  }
+  if (password !== confirmPassword) return 'Passwords do not match';
+  return null;
+};
+
+export const validateEmail = (email: string): string | null => {
+  if (!email.trim()) return 'Enter an email address';
+  return EMAIL_PATTERN.test(email.trim()) ? null : 'Enter a valid email address';
+};
+
 export const validateRegister = ({
   fullName,
   email,
