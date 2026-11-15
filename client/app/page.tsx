@@ -1,27 +1,26 @@
 "use client";
 
-import { useEffect } from "react";
+import { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AfterLogo } from "@/components/AfterLogo/AfterLogo";
-import { useAuth } from "@/contexts/AuthProvider";
 
-export default function LoadingPage() {
-  const { user, ready, error } = useAuth();
+// Welcome screen: only the After logo, until the user clicks or taps anywhere. Then the Client
+// login (which already sends a signed-in user on to /home, and links to the Admin login)
+export default function WelcomePage() {
   const router = useRouter();
 
-  useEffect(() => {
-    if (!ready) return;
-    const timer = window.setTimeout(() => {
-      router.replace(user ? "/home" : "/login");
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [ready, user, router]);
+  // Capture phase: the logo is itself a button that goes to /home, so the click is taken here
+  // before it reaches it and the whole screen behaves the same
+  const onContinue = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    router.push("/login");
+  };
 
   return (
-    <section className="screen auth splash">
-      <AfterLogo />
+    <section className="screen auth splash" onClickCapture={onContinue} aria-label="After. Tap to continue">
+      <AfterLogo tagline={false} />
       <div className="spinner" aria-label="Loading After" />
-      {error ? <p className="form-error">{error}</p> : null}
     </section>
   );
 }
